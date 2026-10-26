@@ -17,6 +17,7 @@
 
 ## 先读这些
 
+- [队友 Codex 协作提示词](docs/teammate-codex-prompt.md)
 - [共享协作规则](AGENTS.md)
 - [已确认硬件与待确认项](docs/hardware.md)
 - [C 视觉接口和语义](docs/interfaces/c-vision.md)
