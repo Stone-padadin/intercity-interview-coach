@@ -1,0 +1,14 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>难开口陪练 摄像头预览</title><link rel="icon" href="data:,">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef2f6;color:#19242e;font-family:system-ui,"Microsoft YaHei",sans-serif}main{max-width:1000px;margin:auto;padding:28px}h1{font-size:25px;margin:0 0 8px}p{line-height:1.7}.view{display:flex;justify-content:center;align-items:center;background:#101820;border-radius:14px;min-height:420px;padding:18px;position:relative}img{display:block;max-width:100%;height:min(64vh,640px);object-fit:contain;image-rendering:auto}.empty{position:absolute;color:#c3ced8;pointer-events:none}.tools{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:18px 0}.status{font-size:15px;color:#42566a}button{border:0;border-radius:8px;background:#254d70;color:white;padding:11px 18px;cursor:pointer;font:inherit}.note{color:#536678;font-size:14px}#problem{color:#a23a27}
+</style><main><h1>摄像头实时预览</h1><p>看着画面调整位置，让脸、双肩和腰部尽量入镜。请把摄像头放稳，使画面中的人保持直立。</p>
+<div class="view"><span class="empty" id="empty">正在等待摄像头画面…</span><img id="camera" alt=""></div>
+<div class="tools"><span class="status" id="status">正在连接…</span><button id="stop">结束预览</button></div>
+<div id="problem"></div><p class="note">画面通过USB传到这台电脑。当前是取景模式；调整好后回到对话，告诉我“画面已摆好”。</p></main>
+<script>
+let active=true,loaded=false;const camera=document.getElementById('camera');
+function frame(){if(!active)return;camera.onload=()=>{loaded=true;document.getElementById('empty').style.display='none';setTimeout(frame,400)};camera.onerror=()=>setTimeout(frame,700);camera.src='/frame.jpg?t='+Date.now()}
+async function status(){if(!active)return;try{const s=await(await fetch('/status',{cache:'no-store'})).json();document.getElementById('status').textContent=s.frames?'第 '+s.sequence+' 帧 · '+s.width+' × '+s.height+' · '+s.age.toFixed(1)+' 秒前更新':(s.connected?'USB已连接，等待图像':'正在等待USB连接');document.getElementById('problem').textContent=s.error||(s.frames&&s.age>4?'画面更新暂停，请检查USB连接。':'');}catch(e){document.getElementById('status').textContent='预览连接已断开'}setTimeout(status,1000)}
+document.getElementById('stop').onclick=async()=>{active=false;try{await fetch('/stop',{method:'POST'})}catch(e){}document.getElementById('status').textContent='预览已停止，可返回对话';document.getElementById('stop').disabled=true};frame();status();
+</script></html>

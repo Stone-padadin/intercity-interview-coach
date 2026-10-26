@@ -1,0 +1,27 @@
+# Local SDKs, credentials, captures and generated outputs never belong in Git.
+external/
+.local/
+.env
+.env.*
+!.env.example
+*secret*
+*credentials*
+__pycache__/
+*.py[cod]
+.venv/
+conda-env/
+idf-python/
+idf-tools/
+build/
+build-*/
+logs/
+captures/
+backups/
+*.bin
+*.elf
+*.map
+*.exe
+*.obj
+*.o
+.vscode/
+.idea/
