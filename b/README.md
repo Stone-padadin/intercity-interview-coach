@@ -1,8 +1,8 @@
 # B · 设备主程序 语音与整机联调
 
-本次首个交付是可独立测试的设备状态和 C 视觉快照适配器。四种产品状态为准备、面试、复盘、重练；代码输出灯光选择和低亮度 RGB 建议值。**尚未接入厂商主循环、联网回调、实际 WS2812 或面试 Agent，不能当成可烧录整机固件。**
+本次交付包含四态设备逻辑、C视觉快照适配器，以及已接入SDK主程序的单任务运行层、真实云连接事件和可选WS2812驱动。语音基线及B+C整合版已在本机编译通过；平台Agent工作流仍待接入，不能据此宣称整机语音和灯光已经验收。
 
-硬件当前在朋友处，计划 10 月 27 日取回。本轮不新增网络 API、物模型属性或引脚，不把 C 的诊断串口当作正式产品接口。
+10月27日已取得硬件并识别COM7上的ESP32-S3、16MB Flash和8MB PSRAM。相机预览已在实物上运行，语音模块与灯圈尚待按[接线说明](wiring.md)接好后实测。本轮不新增网络API、物模型属性或引脚，不把C诊断串口当作正式产品接口。
 
 ## 文件与接口
 
@@ -30,7 +30,7 @@
 
 允许准备→面试→复盘→重练→复盘；任意状态→准备；重复当前状态幂等。离线不能开始面试。姿态变化不能自动切到复盘或重练。
 
-## 接入方法 待整机实现
+## SDK接入与本机构建
 
 先由 C 的原脚本准备固定 SDK；本次没有修改或绕过 `scripts/prepare_sdk.py` 的防覆盖规则。不要把之前另一个 SDK 版本的 B 补丁直接叠加到 C 的固定版本。
 
@@ -46,7 +46,7 @@ b_device_rgb_t rgb = b_device_light_rgb(light);
  * apply rgb only when light changes, and handle the driver return value. */
 ```
 
-这段是接入示例，不是已调用灯圈的代码。固件编译时只加入 `b/firmware` 的 `.c`；使用 C 的真实头文件和上游 ESP-IDF/YOLO 类型。**`tests/stubs` 只供主机测试，绝不能放进固件 include 路径。** 正式主程序接入、SDK 构建和语音并发是下一次独立交付。
+这段是接入示例，不是已调用灯圈的代码。固件编译时只加入 `b/firmware` 的 `.c`；使用 C 的真实头文件和上游 ESP-IDF/YOLO 类型。**`tests/stubs` 只供主机测试，绝不能放进固件 include 路径。** `b_device_runtime.c`已实现上述单任务轮询、真实连接事件排队、可选LED驱动与CLI；语音/视觉/联网共存仍待实物验收。
 
 ## 软件复现
 
@@ -62,9 +62,40 @@ git diff --check
 
 ## 实机验收与队友配合
 
-- B：取回设备后核对丝印、供电、语音模块与数据线；先做单独语音基线，再接灯光和实时视觉。不提交设备凭据、原始日志或 Flash 备份。
+- B：已取回设备，接下来核对语音模块与供电；先做单独语音基线，再验证灯光和实时视觉。不提交设备凭据、原始日志或 Flash 备份。
 - C：先解决新标定版 PID/空帧问题，确认真实 `C_CAL_READY`、正坐/侧倾/回正和未知恢复；与 B 检查语音/视觉共存。
 - D：确认四状态和灯色、用户是否开启提醒、何时进入复盘/重练；提供团队产品/Agent 的正规配置流程，密钥留本机。
 - A：与 D 确认项目和会话数据如何进入同一练习。正式网络 API 仍需协商，本次没有创建。
 
 通过标准：真实项目完成两轮语音→复盘→重答；C 有效持续偏离才触发灯；遮挡/重新标定/过期变未知；断网、重启可按说明恢复；视觉和音频同时运行不复位。软件测试不等于这些实机标准已通过。
+
+## 可执行的整机接入
+
+新建干净固定版本SDK时先运行`python scripts/prepare_sdk.py --clone`。C接入完成且没有额外修改后，再运行：
+
+```sh
+python b/tools/prepare_device.py --check-only
+python b/tools/prepare_device.py
+```
+
+B脚本要求整个已跟踪差异与C补丁内容完全一致，并逐字节验证C新增文件；有其他修改、已暂存工作或B目标目录时拒绝覆盖。再次运行不会重置SDK。B构建前还会检查SDK内B源码与仓库是否一致，防止编译旧副本。
+
+本机工具链放在`.local/idf-tools`，使用固定SDK的`tools/idf_tools.py`安装Xtensa、CMake、Ninja、ULP和ROM文件及`install-python-env`。构建工具从该目录的实际环境和SDK工具清单定位，不复用作者电脑路径。当前构建验证使用项目内Python3.12，主机测试使用Python3.11.9。新机完整自动安装仍不是本脚本的功能。
+
+```sh
+python b/tools/firmware.py build --profile voice
+python b/tools/firmware.py build --profile integrated
+# 接线、供电和实际端口确认后单独烧录，不在build中自动烧录：
+python b/tools/firmware.py flash --profile integrated --port COM7
+python b/tools/firmware.py monitor --profile integrated --port COM7
+```
+
+COM7只是本次已识别端口，新机必须重新查。语音版明确关闭摄像头和模型；整合版要求C live。共享构建输出在`.local/build-device`，生成前一版需单独保存镜像和烧录清单；源码、版本与实测记录同时保留。CMake使用响应文件避开Windows命令行过长，所有本机依赖、镜像和日志均不入Git。
+
+灯圈接好并复核后，再加`--led`构建/烧录。默认不开灯圈驱动。设备CLI支持`b status`、`b phase prepare/interview/review/retry`、`b visual on/off`及`b led test`；本地诊断不是云工作流调用证据，离线仍不能强行开始面试。
+
+## 产品身份与尚待工作
+
+尚无团队产品时，构建明确使用PID=0与UNCONFIGURED离线身份，不沿用上游示例产品冒充本团队；此版不能完成正式配网绑定。创建自己的平台产品和Agent后，在本机运行`b/tools/configure_product.ps1`隐藏输入SECRET，配置只写入被忽略的`.local/product.json`，再重编译烧录。不要把SECRET发到聊天或PR里。
+
+D仍需实现/确认面试与复盘流程如何触发B的状态入口；A与D需提供实际作品或会话入口。灵机官网首页不是本项目的分享入口。保留两轮真实对话、一次平台控制和端到端反馈证据后，才能勾选整机验收。

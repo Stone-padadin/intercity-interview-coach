@@ -3,8 +3,11 @@ from pathlib import Path
 import os
 import shutil
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+subprocess.run([sys.executable,'-m','unittest','discover','-s',str(ROOT/'b/tests'),
+                '-p','test_*.py','-v'],check=True)
 out = ROOT / '.local/b-host-tests'
 out.mkdir(parents=True, exist_ok=True)
 compiler = os.environ.get('CC') or next((c for c in ('cl', 'cc', 'gcc', 'clang') if shutil.which(c)), None)
