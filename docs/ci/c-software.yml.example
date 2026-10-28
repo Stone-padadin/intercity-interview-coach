@@ -1,0 +1,16 @@
+name: C software checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  software:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Protocol and pure C tests
+        run: python scripts/test_c.py
+      - name: Whitespace check
+        run: git diff --check

@@ -1,0 +1,13 @@
+{
+  "url": "https://gitee.com/xj-open/ljyd_xjwb03_agent_public_developer.git",
+  "commit": "06065ce9c5aa1e14cfae5c0ad574bad4aaaae34c",
+  "idf_version": "5.4.1",
+  "integration_files": [
+    "apps/main/CMakeLists.txt",
+    "apps/main/main.c",
+    "apps/main/peripheral/bsp_camera.c",
+    "apps/main/pose/yolo11_pose.cpp",
+    "apps/main/pose/yolo11_pose.h",
+    "apps/main/qm_config/qm_config.h"
+  ]
+}

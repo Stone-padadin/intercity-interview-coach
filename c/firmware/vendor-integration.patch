@@ -1,0 +1,320 @@
+diff --git a/apps/main/CMakeLists.txt b/apps/main/CMakeLists.txt
+index 97379582..8e4985e8 100644
+--- a/apps/main/CMakeLists.txt
++++ b/apps/main/CMakeLists.txt
+@@ -45,6 +45,22 @@ else()
+ endif()
+ message(STATUS "app camera test=${APP_CAMERA_TEST}")
+ 
++set(C_VISION_PROFILE "baseline" CACHE STRING "C module profile: baseline, camera, live, preview")
++set(C_POSE_ROTATE_CW90 "0" CACHE STRING "Rotate camera 90 degrees clockwise before inference: 0 or 1")
++if(NOT C_POSE_ROTATE_CW90 MATCHES "^[01]$")
++    message(FATAL_ERROR "C_POSE_ROTATE_CW90 must be 0 or 1")
++endif()
++if(C_VISION_PROFILE STREQUAL "live")
++    set(APP_CAMERA_TEST 1)
++    set(QM_POSE_SUPPORT 1)
++elseif(C_VISION_PROFILE STREQUAL "camera" OR C_VISION_PROFILE STREQUAL "preview")
++    set(APP_CAMERA_TEST 1)
++    set(QM_POSE_SUPPORT 0)
++elseif(NOT C_VISION_PROFILE STREQUAL "baseline")
++    message(FATAL_ERROR "Unknown C_VISION_PROFILE=${C_VISION_PROFILE}")
++endif()
++message(STATUS "C vision profile=${C_VISION_PROFILE}")
++
+ set(COMPONENT_SRCS
+     "./main.c"
+     "./agent/agent_app.c"
+@@ -174,6 +190,13 @@ if(APP_CAMERA_TEST)
+     list(APPEND COMPONENT_SRCS "./peripheral/bsp_camera.c")
+ endif()
+ 
++if(C_VISION_PROFILE STREQUAL "live")
++    list(APPEND COMPONENT_SRCS "./pose/c_live_pose.c" "./pose/c_posture_filter.c")
++endif()
++if(C_VISION_PROFILE STREQUAL "preview")
++    list(APPEND COMPONENT_SRCS "./peripheral/c_usb_preview.c")
++endif()
++
+ # 闹钟：平台组件和应用层模块一起开关，CONFIG_QM_ALARM_SUPPORT 0 时两者都不编译
+ if(QM_ALARM_SUPPORT)
+     list(APPEND COMPONENT_SRCS
+@@ -186,6 +209,7 @@ if(QM_POSE_SUPPORT)
+     list(APPEND COMPONENT_SRCS
+         "./pose/yolo11_pose.cpp"
+         "./pose/example_pose.c"
++        "./pose/c_posture_calibration.c"
+     )
+ endif()
+ 
+@@ -296,6 +320,9 @@ endif()
+ if(APP_CAMERA_TEST)
+     list(APPEND COMPONENT_REQUIRES espressif__esp_video espressif__esp_cam_sensor)
+ endif()
++if(C_VISION_PROFILE STREQUAL "preview")
++    list(APPEND COMPONENT_REQUIRES espressif__esp_new_jpeg)
++endif()
+ 
+ if(VOICE_BACKEND_AGORA)
+     list(APPEND COMPONENT_REQUIRES pthread 78__esp-opus)
+@@ -307,6 +334,18 @@ endif()
+ 
+ register_component()
+ 
++if(C_VISION_PROFILE STREQUAL "live")
++    target_compile_definitions(${COMPONENT_LIB} PRIVATE
++        CONFIG_APP_CAMERA_TEST=1 CONFIG_QM_POSE_SUPPORT=1 CONFIG_C_LIVE_POSE_SUPPORT=1
++        CONFIG_C_POSE_ROTATE_CW90=${C_POSE_ROTATE_CW90})
++elseif(C_VISION_PROFILE STREQUAL "camera")
++    target_compile_definitions(${COMPONENT_LIB} PRIVATE
++        CONFIG_APP_CAMERA_TEST=1 CONFIG_QM_POSE_SUPPORT=0 CONFIG_C_CAMERA_STANDALONE=1)
++elseif(C_VISION_PROFILE STREQUAL "preview")
++    target_compile_definitions(${COMPONENT_LIB} PRIVATE CONFIG_APP_CAMERA_TEST=1
++        CONFIG_QM_POSE_SUPPORT=0 CONFIG_C_CAMERA_STANDALONE=1 CONFIG_C_USB_PREVIEW=1)
++endif()
++
+ # Optional cloud product identity from idf.py -D / build.bat -pid -secret
+ set(XJIANG_CLOUD_PID "" CACHE STRING "Override CONFIG_XJIANG_CLOUD_PID")
+ set(XJIANG_CLOUD_SECERT "" CACHE STRING "Override CONFIG_XJIANG_CLOUD_SECERT")
+diff --git a/apps/main/main.c b/apps/main/main.c
+index 2d25d9d0..b43ad46a 100644
+--- a/apps/main/main.c
++++ b/apps/main/main.c
+@@ -13,6 +13,12 @@
+ #include "iot_control.h"
+ #include "pomodoro.h"
+ #include "ljyd_course.h"
++#if CONFIG_C_USB_PREVIEW
++#include "c_usb_preview.h"
++#endif
++#if CONFIG_C_LIVE_POSE_SUPPORT
++#include "c_live_pose.h"
++#endif
+ #if defined(CONFIG_QM_POSE_SUPPORT) && CONFIG_QM_POSE_SUPPORT
+ #include "example_pose.h"
+ #endif
+@@ -44,7 +50,27 @@ void app_main(void)
+ 
+ void qm_application_start(void)
+ {
+-#if defined(CONFIG_QM_POSE_SUPPORT) && CONFIG_QM_POSE_SUPPORT
++#if CONFIG_C_CAMERA_STANDALONE
++#if CONFIG_C_USB_PREVIEW
++    if (c_usb_preview_init()!=ESP_OK) {
++        printf("\nCPREVIEW_ERROR preview_init_failed\n");
++        return;
++    }
++#endif
++    if (bsp_camera_start()!=ESP_OK) {
++        QM_LOGE("main","standalone camera start failed");
++#if CONFIG_C_USB_PREVIEW
++        printf("\nCPREVIEW_ERROR camera_start_failed\n");
++#endif
++    }
++    return;
++#endif
++#if CONFIG_C_LIVE_POSE_SUPPORT
++    if (c_live_pose_init()!=ESP_OK) {
++        QM_LOGE("main","live pose init failed");
++        return;
++    }
++#elif defined(CONFIG_QM_POSE_SUPPORT) && CONFIG_QM_POSE_SUPPORT
+     example_pose_run();
+ #endif
+     // if (bsp_servo_init() != QM_EOK) {
+@@ -111,4 +137,10 @@ void qm_application_start(void)
+ #if defined(CONFIG_QM_POMODORO_SUPPORT) && CONFIG_QM_POMODORO_SUPPORT
+     pomodoro_init();
+ #endif
++#if CONFIG_C_LIVE_POSE_SUPPORT
++    /* Enable visual verification even before cloud credentials are configured. */
++    if (bsp_camera_stream_start()!=ESP_OK) {
++        QM_LOGE("main","live camera stream start failed");
++    }
++#endif
+ }
+diff --git a/apps/main/peripheral/bsp_camera.c b/apps/main/peripheral/bsp_camera.c
+index c69fa9a8..8d99a523 100644
+--- a/apps/main/peripheral/bsp_camera.c
++++ b/apps/main/peripheral/bsp_camera.c
+@@ -1,4 +1,14 @@
+ #include "bsp_camera.h"
++#include "qm_config.h"
++#if CONFIG_C_USB_PREVIEW
++#include "c_usb_preview.h"
++#endif
++#if CONFIG_C_CAMERA_STANDALONE && !CONFIG_C_USB_PREVIEW
++#include "esp_rom_crc.h"
++#endif
++#if CONFIG_C_LIVE_POSE_SUPPORT
++#include "c_live_pose.h"
++#endif
+ 
+ #include "esp_cam_ctlr_spi.h"
+ #include "esp_cam_sensor_xclk.h"
+@@ -205,6 +215,31 @@ static esp_err_t cam_stream_on(void)
+     return ESP_OK;
+ }
+ 
++#if CONFIG_C_CAMERA_STANDALONE && !CONFIG_C_USB_PREVIEW
++/* Diagnostic profile only: one slow UART transfer, never in the live voice profile. */
++static void cam_dump_snapshot(const uint8_t *frame,size_t length)
++{
++    static const char hex[]="0123456789abcdef";
++    printf("\nCFRAME_BEGIN width=%" PRIu32 " height=%" PRIu32
++           " format=UYVY bytes=%u\n",s_cam.width,s_cam.height,(unsigned)length);
++    for (size_t offset=0,seq=0;offset<length;offset+=64,seq++) {
++        size_t count=length-offset;
++        if (count>64) { count=64; }
++        char payload[129];
++        for (size_t i=0;i<count;i++) {
++            payload[i*2]=hex[frame[offset+i]>>4];
++            payload[i*2+1]=hex[frame[offset+i]&15];
++        }
++        payload[count*2]='\0';
++        printf("CFRAME_DATA seq=%u %s\n",(unsigned)seq,payload);
++        /* UART output can busy-wait. Let IDLE1 run during the long diagnostic dump. */
++        if ((seq&15u)==15u) { vTaskDelay(pdMS_TO_TICKS(10)); }
++    }
++    printf("CFRAME_END crc32=%08" PRIx32 "\n",esp_rom_crc32_le(0,frame,length));
++    fflush(stdout);
++}
++#endif
++
+ static void cam_stream_task(void *arg)
+ {
+     uint32_t frames = 0;
+@@ -233,8 +268,28 @@ static void cam_stream_task(void *arg)
+         }
+ 
+         frames++;
+-        if (buf.bytesused == expect) {
++        if (buf.index < CAM_BUF_NUM && buf.bytesused == expect &&
++            buf.bytesused <= s_cam.buffer_len[buf.index]) {
+             good++;
++#if CONFIG_C_USB_PREVIEW
++            if (s_cam.pixel_format==V4L2_PIX_FMT_UYVY) {
++                c_usb_preview_frame(s_cam.buffer[buf.index],buf.bytesused,s_cam.width,s_cam.height,frames);
++            }
++#endif
++#if CONFIG_C_CAMERA_STANDALONE && !CONFIG_C_USB_PREVIEW
++            if (good==15 && s_cam.pixel_format==V4L2_PIX_FMT_UYVY) {
++                cam_dump_snapshot(s_cam.buffer[buf.index],buf.bytesused);
++            }
++#endif
++#if CONFIG_C_LIVE_POSE_SUPPORT
++            if (s_cam.pixel_format == V4L2_PIX_FMT_UYVY) {
++                (void)c_live_pose_submit(s_cam.buffer[buf.index],buf.bytesused,
++                                        s_cam.width,s_cam.height,frames);
++            } else if (good == 1) {
++                ESP_LOGE(LOG_TAG,"live pose needs UYVY; fourcc=0x%08" PRIx32,
++                         s_cam.pixel_format);
++            }
++#endif
+         } else {
+             empty++;
+         }
+diff --git a/apps/main/pose/yolo11_pose.cpp b/apps/main/pose/yolo11_pose.cpp
+index d0c7c1c6..5e323730 100644
+--- a/apps/main/pose/yolo11_pose.cpp
++++ b/apps/main/pose/yolo11_pose.cpp
+@@ -92,7 +92,8 @@ static yolo11_pose_err_type_t pick_primary_pose_err(bool yaw_bad,
+ static void analyze_pose_result(const dl::detect::result_t &res,
+                                 int img_w,
+                                 int img_h,
+-                                yolo11_pose_frame_result_t *out)
++                                yolo11_pose_frame_result_t *out,
++                                size_t people_count)
+ {
+     const auto &kp = res.keypoint;
+     int nose_x = kp[0];
+@@ -106,6 +107,15 @@ static void analyze_pose_result(const dl::detect::result_t &res,
+     int rs_x = kp[12];
+     int rs_y = kp[13];
+ 
++    out->person_count=(uint8_t)(people_count>255 ? 255 : people_count);
++    out->detection_score=res.score;
++    c_posture_landmarks_t points={};
++    points.width=img_w; points.height=img_h;
++    points.people=(unsigned)people_count; points.score=res.score;
++    points.nose_x=nose_x; points.nose_y=nose_y;
++    points.left_x=ls_x; points.left_y=ls_y; points.right_x=rs_x; points.right_y=rs_y;
++    (void)c_posture_geometry_make(&points,&out->geometry);
++
+     out->status = YOLO11_POSE_FRAME_OK;
+     out->err_type = YOLO11_POSE_ERR_NONE;
+     out->yaw = 0.0f;
+@@ -511,7 +521,7 @@ static esp_err_t analyze_rgb888_img(const dl::image::img_t &img,
+     log_pose_keypoints(name, res);
+ 
+     if (out != nullptr) {
+-        analyze_pose_result(res, (int)img.width, (int)img.height, out);
++        analyze_pose_result(res, (int)img.width, (int)img.height, out, pose_results.size());
+         ESP_LOGI(TAG,
+                  "%s pose metrics yaw=%.3f roll=%.3f shoulder=%.3f lean=%.3f eye=%.3f head=%.3f status=%d err=%d",
+                  name,
+@@ -852,7 +862,7 @@ extern "C" esp_err_t yolo11_pose_analyze_jpg_named(const uint8_t *jpg_data,
+     log_pose_keypoints(name, res);
+ 
+     if (out != nullptr) {
+-        analyze_pose_result(res, (int)img.width, (int)img.height, out);
++        analyze_pose_result(res, (int)img.width, (int)img.height, out, pose_results.size());
+         ESP_LOGI(TAG,
+                  "%s pose metrics yaw=%.3f roll=%.3f shoulder=%.3f lean=%.3f eye=%.3f head=%.3f status=%d err=%d",
+                  name,
+diff --git a/apps/main/pose/yolo11_pose.h b/apps/main/pose/yolo11_pose.h
+index a0c969ac..caeb764c 100644
+--- a/apps/main/pose/yolo11_pose.h
++++ b/apps/main/pose/yolo11_pose.h
+@@ -4,6 +4,7 @@
+ #include "esp_err.h"
+ #include <stddef.h>
+ #include <stdint.h>
++#include "c_posture_calibration.h"
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -33,6 +34,9 @@ typedef struct {
+     float lean;
+     float eye_w_ratio;
+     float head_down_ratio;
++    uint8_t person_count;
++    float detection_score;
++    c_posture_geometry_t geometry;
+ } yolo11_pose_frame_result_t;
+ 
+ esp_err_t yolo11_pose_init(void);
+diff --git a/apps/main/qm_config/qm_config.h b/apps/main/qm_config/qm_config.h
+index 87df5535..2a1380d2 100644
+--- a/apps/main/qm_config/qm_config.h
++++ b/apps/main/qm_config/qm_config.h
+@@ -147,7 +147,9 @@ int qm_vsnprintf(char *str, size_t count, const char *fmt, va_list ap);
+ #define CONFIG_QM_ALARM_SUPPORT 1
+ 
+ /* 姿态识别总开关：0 = 不编译 yolo11_pose，也不初始化 */
++#ifndef CONFIG_QM_POSE_SUPPORT
+ #define CONFIG_QM_POSE_SUPPORT 1
++#endif
+ #define CONFIG_QM_ALARM_MAX_ALARMS 8
+ #define CONFIG_QM_ALARM_SNOOZE_INTERVAL_MIN 5
+ 
+@@ -176,7 +178,19 @@ int qm_vsnprintf(char *str, size_t count, const char *fmt, va_list ap);
+ #define CONFIG_APP_POMODORO_AUTO_START 0
+ 
+ /* 1：在完整应用里编译并启动 BF3901 摄像头取流。 */
++#ifndef CONFIG_APP_CAMERA_TEST
+ #define CONFIG_APP_CAMERA_TEST 0
++#endif
++
++#ifndef CONFIG_C_LIVE_POSE_SUPPORT
++#define CONFIG_C_LIVE_POSE_SUPPORT 0
++#endif
++#ifndef CONFIG_C_CAMERA_STANDALONE
++#define CONFIG_C_CAMERA_STANDALONE 0
++#endif
++#ifndef CONFIG_C_USB_PREVIEW
++#define CONFIG_C_USB_PREVIEW 0
++#endif
+ 
+ /* 0 关，1 打方向和命令，2 再打整帧十六进制 */
+ #define VB701N_UART_TRACE 0
