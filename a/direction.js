@@ -27,7 +27,7 @@ function extractResumeFields(text=''){
   };
 }
 const extracted=extractResumeFields(savedResume?.text||'');
-const sameResume=savedProject&&savedResume&&savedProject.resumeFile===savedResume.fileName;
+const sameResume=savedProject&&(!savedResume||savedProject.resumeFile===savedResume.fileName);
 const values=sameResume?{...extracted,...savedProject}:extracted;
 function field(label,key,multiline=false){const wrapper=document.createElement('label');wrapper.className='project-field';wrapper.textContent=label;const input=document.createElement(multiline?'textarea':'input');input.name=key;input.value=values[key]||defaults[key];if(multiline)input.rows=3;wrapper.append(input);return wrapper}
 if(form){
@@ -45,6 +45,11 @@ if(form){
 async function saveProject(){
   const data={professional:extracted.professional,target:extracted.target,skills:extracted.skills};document.querySelectorAll('.project-field input,.project-field textarea').forEach(input=>{data[input.name]=input.value.trim()});
   data.resumeFile=savedResume?.fileName||'';data.candidateName=savedResume?.candidateName||localStorage.getItem('candidateName')||'';data.session_id=sessionId;data.updatedAt=new Date().toISOString();localStorage.setItem('practiceProject',JSON.stringify(data));
+  const records=JSON.parse(localStorage.getItem('practiceProjects')||'[]');
+  const existingIndex=records.findIndex(record=>record.session_id===sessionId);
+  if(existingIndex>=0)records[existingIndex]={...records[existingIndex],...data};
+  else records.unshift(data);
+  localStorage.setItem('practiceProjects',JSON.stringify(records));
   const payload={...data,project_name:data.projectName};delete payload.projectName;
   let response;
   try{response=await fetch(window.InterviewPracticeApi.url('/api/projects'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});}

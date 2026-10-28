@@ -12,6 +12,11 @@ if(location.pathname.endsWith('direction.html')){
   script.src='direction.js';
   document.body.append(script);
 }
+if(location.pathname.endsWith('history.html')){
+  const script=document.createElement('script');
+  script.src='history.js';
+  document.body.append(script);
+}
 function renderCandidateName(name){
   document.querySelectorAll('.profile strong').forEach(node=>node.textContent=name||'');
   document.querySelectorAll('.profile-avatar').forEach(node=>node.textContent=name?name[0]:'');
@@ -23,5 +28,8 @@ if(candidateName){
 document.querySelectorAll('.new-button').forEach(button=>button.addEventListener('click',()=>{
   localStorage.removeItem('candidateName');
   localStorage.removeItem('resumeParsed');
+  localStorage.removeItem('practiceProject');
+  localStorage.removeItem('session_id');
+  localStorage.removeItem('projectId');
   renderCandidateName('');
 }));
