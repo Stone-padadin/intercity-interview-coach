@@ -1,0 +1,15 @@
+{
+  "name": "interview-practice",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interview practice prototype",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "latest",
+    "mammoth": "latest",
+    "multer": "latest",
+    "pdf-parse": "latest"
+  }
+}

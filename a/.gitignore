@@ -1,0 +1,13 @@
+node_modules/
+uploads/
+*.db
+*.db-shm
+*.db-wal
+interview-practice.json
+.env
+.env.*
+!.env.example
+*.log
+*.docx
+*.pdf
+
