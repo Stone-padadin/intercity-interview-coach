@@ -7,14 +7,9 @@ if(location.pathname.endsWith('settings.html')){
   const list=document.querySelector('.settings-list');
   if(list){const row=document.createElement('div');row.innerHTML='<strong>后端地址</strong><span>公网部署时填写独立 Node.js 后端地址；留空使用演示模式</span><input id="apiBase" type="url" placeholder="https://your-backend.example.com"><button id="saveApi" type="button">保存地址</button><small id="apiStatus"></small>';list.append(row);const input=row.querySelector('#apiBase');const status=row.querySelector('#apiStatus');input.value=window.InterviewPracticeApi.base||'';status.textContent=window.InterviewPracticeApi.isConfigured?'已配置后端':'当前为演示模式';row.querySelector('#saveApi').addEventListener('click',()=>window.InterviewPracticeApi.save(input.value));}
 }
-if(location.pathname.endsWith('direction.html')){
-  const script=document.createElement('script');
-  script.src='direction.js';
-  document.body.append(script);
-}
 if(location.pathname.endsWith('history.html')){
   const script=document.createElement('script');
-  script.src='history.js';
+  script.src='history.js?v=20261029-pages';
   document.body.append(script);
 }
 function renderCandidateName(name){
