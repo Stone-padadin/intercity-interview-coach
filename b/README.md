@@ -2,7 +2,7 @@
 
 本次交付包含四态设备逻辑、C视觉快照适配器，以及已接入SDK主程序的单任务运行层、真实云连接事件和可选WS2812驱动。语音基线及B+C整合版已在本机编译通过；平台Agent工作流仍待接入，不能据此宣称整机语音和灯光已经验收。
 
-10月27日已取得硬件并识别COM7上的ESP32-S3、16MB Flash和8MB PSRAM。相机预览已在实物上运行，语音模块与灯圈尚待按[接线说明](wiring.md)接好后实测。本轮不新增网络API、物模型属性或引脚，不把C诊断串口当作正式产品接口。
+10月27日已取得硬件并识别COM7上的ESP32-S3、16MB Flash和8MB PSRAM。相机预览已在实物上运行；语音板、麦克风和喇叭已连接，用户确认开机提示音清楚，日志有麦克风数据与离线唤醒事件。10月29日正坐标定及独立样本记录见[当前联调交接](integration-20261029.md)；灯圈仍未焊接。本轮不新增网络API、物模型属性或引脚，不把C诊断串口当作正式产品接口。
 
 ## 文件与接口
 
@@ -99,3 +99,19 @@ COM7只是本次已识别端口，新机必须重新查。语音版明确关闭�
 尚无团队产品时，构建明确使用PID=0与UNCONFIGURED离线身份，不沿用上游示例产品冒充本团队；此版不能完成正式配网绑定。创建自己的平台产品和Agent后，在本机运行`b/tools/configure_product.ps1`隐藏输入SECRET，配置只写入被忽略的`.local/product.json`，再重编译烧录。不要把SECRET发到聊天或PR里。
 
 D仍需实现/确认面试与复盘流程如何触发B的状态入口；A与D需提供实际作品或会话入口。灵机官网首页不是本项目的分享入口。保留两轮真实对话、一次平台控制和端到端反馈证据后，才能勾选整机验收。
+
+## 10月29日可复现检查
+
+安装pyserial后，退出其他占用串口的监视器，再运行：
+
+```powershell
+python b/tools/check_device.py --port COM7 --seconds 40
+# 仅在固定机位、头肩完整且用户准备好时重新建立基准：
+python b/tools/check_device.py --port COM7 --seconds 50 --calibrate
+# 取得本人团队产品的SECRET后在本机隐藏输入，不发到聊天或PR：
+powershell -NoProfile -File b/tools/configure_product.ps1 -ProductPid 11814
+```
+
+检查工具不主动复位板子，原始日志只保留在ignored `.local/device-checks`，终端仅打印统计。QM精简日志可不带模块名，统计以实际消息内容识别；标定READY、valid及稳定状态分别统计，发生panic不会被后续恢复掩盖。没有输出不能解读为已通过。未联网时B状态中的pose仍可为UNKNOWN，不能与C的离线诊断标定混淆。
+
+Product PID和Agent ID用途不同。当前厂商SDK使用PID与产品SECRET认证；Agent由平台产品绑定，不能把Agent ID当SECRET，也不能拿上游示例身份替代。配置后仍需重编译、烧录、按平台流程配网并实际验证对话。

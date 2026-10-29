@@ -1,6 +1,7 @@
+param([uint32]$ProductPid = 0)
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$productText = Read-Host 'Team product PID'
+$productText = if ($ProductPid -gt 0) { [string]$ProductPid } else { Read-Host 'Team product PID' }
 $productNumber = [uint32]0
 if (-not [uint32]::TryParse($productText, [ref]$productNumber) -or $productNumber -eq 0) {
     throw 'Enter the positive product PID from your own platform product.'
