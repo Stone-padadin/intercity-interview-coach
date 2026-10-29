@@ -6,17 +6,23 @@ const form=document.querySelector('.form-list');
 const confirmLink=document.querySelector('a[href="practice.html"]');
 function extractResumeFields(text=''){
   const clean=text.replace(/\r/g,'');
+  const lines=clean.split('\n').map(value=>value.trim()).filter(Boolean);
   const line=pattern=>clean.match(pattern)?.[1]?.trim()||'';
-  const projectName=line(/(?:^|\n)([^\n]{2,30}?)(?:\s*[|｜]\s*课程设计|\s*[（(]课程设计)/);
+  const labeled=(labels)=>line(new RegExp(`(?:^|\\n)\\s*(?:${labels})\\s*[：:]\\s*([^\\n]+)`,'i'));
+  const sectionValue=(labels)=>{
+    const index=lines.findIndex(value=>new RegExp(`^(?:${labels})$`,'i').test(value.replace(/[：:]$/,'')));
+    return index>=0?lines[index+1]||'':'';
+  };
+  const projectName=line(/(?:^|\n)\s*([^\n]{2,40}?)(?:\s*[|｜]\s*(?:课程设计|项目经历)|\s*[（(](?:课程设计|项目经历))/i)||sectionValue('项目经历|项目经验|代表项目');
   return {
-    professional:line(/(?:专业方向|专业)\s*[：:]\s*([^\n]+)/),
-    target:line(/目标岗位\s*[：:]\s*([^\n]+)/),
-    skills:line(/(?:编程与工具|技术栈|技能)\s*[：:]\s*([^\n]+)/),
+    professional:labeled('专业方向|所学专业|本科专业|专业')||sectionValue('专业方向|所学专业|本科专业|专业'),
+    target:labeled('目标岗位|求职意向|意向岗位|目标方向|就业方向')||sectionValue('目标岗位|求职意向|意向岗位|目标方向|就业方向'),
+    skills:labeled('编程与工具|技术栈|技能关键词|专业技能|技能')||sectionValue('编程与工具|技术栈|技能关键词|专业技能|技能'),
     projectName,
-    contribution:line(/个人贡献\s*[：:]\s*([\s\S]*?)(?=\n(?:技术方案|调试过程|项目结果)\s*[：:])/),
-    technicalPlan:line(/技术方案\s*[：:]\s*([\s\S]*?)(?=\n(?:调试过程|项目结果)\s*[：:])/),
-    debugging:line(/调试过程\s*[：:]\s*([\s\S]*?)(?=\n项目结果\s*[：:])/),
-    result:line(/项目结果\s*[：:]\s*([^\n]+)/)
+    contribution:line(/个人贡献\s*[：:]\s*([\s\S]*?)(?=\n(?:技术方案|调试过程|项目结果)\s*[：:])/i),
+    technicalPlan:line(/技术方案\s*[：:]\s*([\s\S]*?)(?=\n(?:调试过程|项目结果)\s*[：:])/i),
+    debugging:line(/调试过程\s*[：:]\s*([\s\S]*?)(?=\n项目结果\s*[：:])/i),
+    result:line(/项目结果\s*[：:]\s*([^\n]+)/i)
   };
 }
 const extracted=extractResumeFields(savedResume?.text||'');
