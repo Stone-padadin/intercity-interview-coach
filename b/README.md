@@ -115,3 +115,5 @@ powershell -NoProfile -File b/tools/configure_product.ps1 -ProductPid 11814
 检查工具不主动复位板子，原始日志只保留在ignored `.local/device-checks`，终端仅打印统计。QM精简日志可不带模块名，统计以实际消息内容识别；标定READY、valid及稳定状态分别统计，发生panic不会被后续恢复掩盖。没有输出不能解读为已通过。未联网时B状态中的pose仍可为UNKNOWN，不能与C的离线诊断标定混淆。
 
 Product PID和Agent ID用途不同。当前厂商SDK使用PID与产品SECRET认证；Agent由平台产品绑定，不能把Agent ID当SECRET，也不能拿上游示例身份替代。配置后仍需重编译、烧录、按平台流程配网并实际验证对话。
+
+固定厂商SDK的BLE产品密钥上限为32字节：STR_PROD_SEC_LEN=(32+1)，适配器仅复制strlen<33的输入。B配置入口接受8-32个ASCII字符，超长在任何工具链/烧录动作前拒绝；不要自行截断，从正确产品详情重新复制。产品密码长度限制与Wi-Fi密码限制不同。校验只证明格式符合适配器，不证明与平台一致。

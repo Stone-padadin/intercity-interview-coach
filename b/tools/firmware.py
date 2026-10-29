@@ -32,6 +32,15 @@ def environment():
     env['PATH']=os.pathsep.join([str(python.parent),*paths,env.get('PATH','')])
     return python,env
 
+def product_identity(path):
+    identity=json.loads(path.read_text(encoding='utf-8-sig')) if path.exists() else {'pid':0,'secret':'UNCONFIGURED'}
+    pid=identity.get('pid'); secret=identity.get('secret')
+    # The pinned BLE SDK uses strlen(secret) < STR_PROD_SEC_LEN (32 + 1).
+    # Longer values are silently discarded by the vendor adapter.
+    if not isinstance(pid,int) or not 0<=pid<=0xffffffff or not isinstance(secret,str) or not re.fullmatch(r'[A-Za-z0-9_-]{8,32}',secret):
+        raise SystemExit('Invalid product configuration: SECRET must contain 8-32 ASCII characters for this SDK. Recopy it from the product page; do not truncate it.')
+    return pid,secret
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action',choices=['build','flash','monitor'])
@@ -41,6 +50,7 @@ def main():
     args=parser.parse_args()
     if args.action!='build' and (not args.port or not re.fullmatch(r'COM[1-9][0-9]*',args.port,re.I)):
         parser.error('Identify the actual board and supply --port COM7')
+    pid,secret=product_identity(ROOT/'.local/product.json')
     python,env=environment()
     for source in (ROOT/'b/firmware').glob('*.[ch]'):
         target=SDK/'apps/main/b_device'/source.name
@@ -50,11 +60,6 @@ def main():
     build=ROOT/'.local/build-device'
     config=ROOT/'.local/sdkconfig-device'
     if not config.exists(): shutil.copy2(SDK/'apps/sdkconfig',config)
-    product=ROOT/'.local/product.json'
-    identity=json.loads(product.read_text(encoding='utf-8-sig')) if product.exists() else {'pid':0,'secret':'UNCONFIGURED'}
-    pid=identity.get('pid'); secret=identity.get('secret')
-    if not isinstance(pid,int) or not 0<=pid<=0xffffffff or not isinstance(secret,str) or not re.fullmatch(r'[A-Za-z0-9_-]{8,128}',secret):
-        raise SystemExit('Invalid local product configuration')
     if pid==0: print('No team product configured: offline bring-up only; cloud pairing is not ready.')
     cmd=[str(python),str(SDK/'esp-idf/tools/idf.py'),'-C',str(SDK/'apps'),'-B',str(build),
          '-D','CMAKE_NINJA_FORCE_RESPONSE_FILE=ON',
