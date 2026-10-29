@@ -1,0 +1,5 @@
+#!/bin/bash
+export PORT=9000
+export UPLOAD_DIR=/tmp/interview-practice/uploads
+export PROJECTS_PATH=/tmp/interview-practice/projects.json
+/var/lang/node20/bin/node server.js
