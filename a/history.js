@@ -1,5 +1,6 @@
 const list=document.querySelector('.record-list');
 if(list){
+  const flowStyles=document.createElement('link');flowStyles.rel='stylesheet';flowStyles.href='practice-flow.css?v=20261029-pages';document.head.append(flowStyles);
   list.replaceChildren();
   let records=[];
   try{records=JSON.parse(localStorage.getItem('practiceProjects')||'[]')}catch{}
@@ -34,4 +35,20 @@ if(list){
     });
     card.append(copy,open);list.append(card);
   });
+}
+
+const historyRuns=(()=>{try{return JSON.parse(localStorage.getItem('practiceRuns')||'[]').filter(run=>run.status==='completed')}catch{return []}})();
+const historyPage=document.querySelector('.history-page');
+if(historyPage){
+  const section=document.createElement('section');section.className='completed-runs';
+  const heading=document.createElement('h2');heading.textContent='已完成的练习';
+  const entries=document.createElement('div');entries.className='run-list';
+  if(!historyRuns.length){const empty=document.createElement('p');empty.className='history-empty-note';empty.textContent='完成文字陪练后，复盘入口会显示在这里。';entries.append(empty)}
+  historyRuns.forEach(run=>{
+    const link=document.createElement('a');link.className='run-link';link.href=`review.html?runId=${encodeURIComponent(run.id)}`;
+    const copy=document.createElement('span');const title=document.createElement('strong');title.textContent=run.project?.projectName||run.project?.project_name||'项目练习';
+    const date=document.createElement('small');date.textContent=new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'long',day:'numeric'}).format(new Date(run.completedAt));copy.append(title,date);
+    const action=document.createElement('b');action.textContent='查看复盘 →';link.append(copy,action);entries.append(link);
+  });
+  section.append(heading,entries);historyPage.append(section);
 }
