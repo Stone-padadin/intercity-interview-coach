@@ -3,6 +3,7 @@ uploads/
 *.db
 *.db-shm
 *.db-wal
+interview-practice.json
 .env
 .env.*
 !.env.example

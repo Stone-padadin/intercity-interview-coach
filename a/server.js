@@ -5,31 +5,19 @@ const express=require('express');
 const multer=require('multer');
 const mammoth=require('mammoth');
 const {PDFParse}=require('pdf-parse');
-const Database=require('better-sqlite3');
 
 const app=express();
 const port=Number(process.env.PORT||8765);
-const uploadDir=path.join(__dirname,'uploads');
+const uploadDir=process.env.UPLOAD_DIR||path.join(__dirname,'uploads');
 fs.mkdirSync(uploadDir,{recursive:true});
-const db=new Database(path.join(__dirname,'interview-practice.db'));
-db.pragma('journal_mode = WAL');
-db.exec(`CREATE TABLE IF NOT EXISTS projects (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id TEXT NOT NULL,
-  candidate_name TEXT,
-  resume_file TEXT,
-  professional TEXT,
-  target TEXT,
-  skills TEXT,
-  project_name TEXT NOT NULL,
-  contribution TEXT,
-  technical_plan TEXT,
-  debugging TEXT,
-  result TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-)`);
-const saveProject=db.prepare(`INSERT INTO projects (session_id,candidate_name,resume_file,professional,target,skills,project_name,contribution,technical_plan,debugging,result,created_at,updated_at) VALUES (@session_id,@candidate_name,@resume_file,@professional,@target,@skills,@project_name,@contribution,@technical_plan,@debugging,@result,@created_at,@updated_at)`);
+const projectsPath=process.env.PROJECTS_PATH||path.join(__dirname,'interview-practice.json');
+function readProjects(){
+  try{return JSON.parse(fs.readFileSync(projectsPath,'utf8'));}
+  catch(error){return [];}
+}
+function writeProjects(projects){
+  fs.writeFileSync(projectsPath,JSON.stringify(projects,null,2));
+}
 const upload=multer({dest:uploadDir,limits:{fileSize:10*1024*1024},fileFilter:(req,file,done)=>{
   const ext=path.extname(file.originalname).toLowerCase();
   const allowed=['.pdf','.doc','.docx'];
@@ -68,12 +56,15 @@ app.post('/api/projects',(req,res)=>{
     technical_plan:String(input.technical_plan||''),debugging:String(input.debugging||''),result:String(input.result||''),
     created_at:now,updated_at:now
   };
-  const saved=saveProject.run(project);
-  res.status(201).json({id:saved.lastInsertRowid,...project});
+  const projects=readProjects();
+  const saved={id:projects.length?Math.max(...projects.map(item=>Number(item.id)||0))+1:1,...project};
+  projects.push(saved);
+  writeProjects(projects);
+  res.status(201).json(saved);
 });
 
 app.get('/api/projects/:sessionId',(req,res)=>{
-  const project=db.prepare('SELECT * FROM projects WHERE session_id = ? ORDER BY id DESC LIMIT 1').get(req.params.sessionId);
+  const project=readProjects().filter(item=>item.session_id===req.params.sessionId).sort((a,b)=>b.id-a.id)[0];
   if(!project)return res.status(404).json({error:'未找到项目记录'});
   res.json(project);
 });
@@ -111,4 +102,4 @@ app.use((error,req,res,next)=>{
   next();
 });
 
-app.listen(port,()=>console.log(`Interview practice server: http://127.0.0.1:${port}`));
+app.listen(port,'0.0.0.0',()=>console.log(`Interview practice server listening on ${port}`));
