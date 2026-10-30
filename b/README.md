@@ -117,3 +117,8 @@ powershell -NoProfile -File b/tools/configure_product.ps1 -ProductPid 11814
 Product PID和Agent ID用途不同。当前厂商SDK使用PID与产品SECRET认证；Agent由平台产品绑定，不能把Agent ID当SECRET，也不能拿上游示例身份替代。配置后仍需重编译、烧录、按平台流程配网并实际验证对话。
 
 固定厂商SDK的BLE产品密钥上限为32字节：STR_PROD_SEC_LEN=(32+1)，适配器仅复制strlen<33的输入。B配置入口接受8-32个ASCII字符，超长在任何工具链/烧录动作前拒绝；不要自行截断，从正确产品详情重新复制。产品密码长度限制与Wi-Fi密码限制不同。校验只证明格式符合适配器，不证明与平台一致。
+
+
+## 10月30日续报
+
+当前实物运行voice基线：相机/模型/LED关闭，BLE认证后已接收Wi-Fi配置，尚未取IP或连云；新密钥整合版曾出现连续相机任务异常，不能用于稳定演示。完整证据和队友待办见[联调续报](bringup-20261030.md)。IDF构建子进程已隔离继承的PYTHONPATH，防止诊断包覆盖工具链依赖；15项Python及两套C测试通过。
