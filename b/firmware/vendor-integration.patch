@@ -1,0 +1,118 @@
+diff --git a/apps/main/CMakeLists.txt b/apps/main/CMakeLists.txt
+--- a/apps/main/CMakeLists.txt
++++ b/apps/main/CMakeLists.txt
+@@ -60,6 +60,23 @@
+     message(FATAL_ERROR "Unknown C_VISION_PROFILE=${C_VISION_PROFILE}")
+ endif()
+ message(STATUS "C vision profile=${C_VISION_PROFILE}")
++
++set(B_DEVICE_PROFILE "off" CACHE STRING "B device profile: off, voice, integrated")
++option(B_DEVICE_LED_ENABLE "Enable verified external WS2812 wiring" OFF)
++if(B_DEVICE_PROFILE STREQUAL "voice")
++    if(NOT C_VISION_PROFILE STREQUAL "baseline")
++        message(FATAL_ERROR "B voice requires C baseline")
++    endif()
++    set(APP_CAMERA_TEST 0)
++    set(QM_POSE_SUPPORT 0)
++elseif(B_DEVICE_PROFILE STREQUAL "integrated")
++    if(NOT C_VISION_PROFILE STREQUAL "live")
++        message(FATAL_ERROR "B integrated requires C live")
++    endif()
++elseif(NOT B_DEVICE_PROFILE STREQUAL "off")
++    message(FATAL_ERROR "Unknown B_DEVICE_PROFILE=${B_DEVICE_PROFILE}")
++endif()
++message(STATUS "B device profile=${B_DEVICE_PROFILE} LED=${B_DEVICE_LED_ENABLE}")
+ 
+ set(COMPONENT_SRCS
+     "./main.c"
+@@ -197,6 +214,13 @@
+     list(APPEND COMPONENT_SRCS "./peripheral/c_usb_preview.c")
+ endif()
+ 
++if(NOT B_DEVICE_PROFILE STREQUAL "off")
++    list(APPEND COMPONENT_SRCS "./b_device/b_device_state.c" "./b_device/b_device_runtime.c")
++    if(B_DEVICE_PROFILE STREQUAL "integrated")
++        list(APPEND COMPONENT_SRCS "./b_device/b_c_vision.c")
++    endif()
++endif()
++
+ # 闹钟：平台组件和应用层模块一起开关，CONFIG_QM_ALARM_SUPPORT 0 时两者都不编译
+ if(QM_ALARM_SUPPORT)
+     list(APPEND COMPONENT_SRCS
+@@ -220,6 +244,7 @@
+ )
+ 
+ set(COMPONENT_ADD_INCLUDEDIRS
++    "./b_device"
+     "./qm_config"
+     "./lj_components/alarm"
+     "./agent"
+@@ -334,6 +359,14 @@
+ 
+ register_component()
+ 
++if(NOT B_DEVICE_PROFILE STREQUAL "off")
++    target_compile_definitions(${COMPONENT_LIB} PRIVATE CONFIG_B_DEVICE_SUPPORT=1
++        CONFIG_B_DEVICE_LED_SUPPORT=$<BOOL:${B_DEVICE_LED_ENABLE}>)
++    if(B_DEVICE_PROFILE STREQUAL "voice")
++        target_compile_definitions(${COMPONENT_LIB} PRIVATE CONFIG_QM_POSE_SUPPORT=0 CONFIG_APP_CAMERA_TEST=0)
++    endif()
++endif()
++
+ if(C_VISION_PROFILE STREQUAL "live")
+     target_compile_definitions(${COMPONENT_LIB} PRIVATE
+         CONFIG_APP_CAMERA_TEST=1 CONFIG_QM_POSE_SUPPORT=1 CONFIG_C_LIVE_POSE_SUPPORT=1
+diff --git a/apps/main/main.c b/apps/main/main.c
+--- a/apps/main/main.c
++++ b/apps/main/main.c
+@@ -13,6 +13,9 @@
+ #include "iot_control.h"
+ #include "pomodoro.h"
+ #include "ljyd_course.h"
++#if CONFIG_B_DEVICE_SUPPORT
++#include "b_device_runtime.h"
++#endif
+ #if CONFIG_C_USB_PREVIEW
+ #include "c_usb_preview.h"
+ #endif
+@@ -90,6 +93,12 @@
+         QM_LOGE("main", "io init failed");
+         return;
+     }
++#if CONFIG_B_DEVICE_SUPPORT
++    if (b_device_runtime_init()!=QM_EOK) {
++        QM_LOGE("main","B runtime init failed");
++        return;
++    }
++#endif
+ #if defined(CONFIG_APP_CAMERA_TEST) && CONFIG_APP_CAMERA_TEST
+     if (bsp_camera_early_init() != ESP_OK) {
+         QM_LOGE("main", "camera early init failed");
+diff --git a/apps/main/agent/agent_app.c b/apps/main/agent/agent_app.c
+--- a/apps/main/agent/agent_app.c
++++ b/apps/main/agent/agent_app.c
+@@ -1,4 +1,7 @@
+ #include "agent_app.h"
++#if CONFIG_B_DEVICE_SUPPORT
++#include "b_device_runtime.h"
++#endif
+ #include "ljyd_cloud.h"
+ #include "qm_config.h"
+ 
+@@ -443,10 +446,16 @@
+     (void)userdata;
+     (void)iot_handle;
+     if (event == LJYD_CLOUD_EVENT_CONNECTED) {
++#if CONFIG_B_DEVICE_SUPPORT
++        b_device_runtime_cloud(true);
++#endif
+         agent_on_cloud_connected();
+         return;
+     }
+     if (event == LJYD_CLOUD_EVENT_DISCONNECTED) {
++#if CONFIG_B_DEVICE_SUPPORT
++        b_device_runtime_cloud(false);
++#endif
+         agent_on_cloud_disconnected();
+     }
+ }
