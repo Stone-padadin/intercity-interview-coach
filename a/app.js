@@ -11,15 +11,29 @@ async function acceptFile(file){
   document.querySelector('#filename').textContent=file.name;
   document.querySelector('#meta').textContent=`${(file.size/1024/1024).toFixed(2)} MB · 正在解析…`;
   uploaded.classList.remove('hidden');drop.classList.add('hidden');showToast('正在解析简历…');
-  const data=new FormData();data.append('resume',file);
+  async function parseWithRetry(attempt=0){
+    const data=new FormData();data.append('resume',file);
+    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),45000);
+    try{
+      const response=await fetch(window.InterviewPracticeApi.url('/api/resume/parse'),{method:'POST',body:data,signal:controller.signal});
+      const result=await response.json().catch(()=>({error:'服务器返回了无法读取的响应'}));
+      if(!response.ok){const error=new Error(result.error||`解析失败（HTTP ${response.status}）`);error.status=response.status;throw error}
+      return result;
+    }catch(error){
+      const retryable=error.name==='AbortError'||!error.status||error.status===429||error.status>=500;
+      if(attempt===0&&retryable){document.querySelector('#meta').textContent=`${(file.size/1024/1024).toFixed(2)} MB · 连接波动，正在重试…`;await new Promise(resolve=>setTimeout(resolve,900));return parseWithRetry(1)}
+      if(error.name==='AbortError')throw new Error('解析请求超时（45 秒），请检查网络后重试');
+      if(!error.status)throw new Error('暂时连接不到解析服务，请检查网络后重试');
+      throw error;
+    }finally{clearTimeout(timer)}
+  }
   try{
-    const response=await fetch(window.InterviewPracticeApi.url('/api/resume/parse'),{method:'POST',body:data});
-    const result=await response.json();
-    if(!response.ok)throw new Error(result.error||'解析失败');
+    const result=await parseWithRetry();
     document.querySelector('#meta').textContent=`${(result.size/1024/1024).toFixed(2)} MB · 已解析 ${result.characters} 个字符`;
     let preview=document.querySelector('#resumePreview');
     if(!preview){preview=document.createElement('pre');preview.id='resumePreview';preview.className='resume-preview';uploaded.after(preview)}
     preview.textContent=result.text.slice(0,3000);
+    document.querySelector('#retryParse')?.remove();
     localStorage.setItem('resumeParsed',JSON.stringify(result));
     if(result.candidateName){
       localStorage.setItem('candidateName',result.candidateName);
@@ -28,10 +42,10 @@ async function acceptFile(file){
     }
     showToast('简历解析完成');
   }catch(error){
-    const demo={fileName:file.name,text:'演示模式：暂未连接简历解析后端。\n请在设置页填写独立后端地址后重试。',size:file.size,characters:0,candidateName:''};
-    localStorage.setItem('resumeParsed',JSON.stringify(demo));
-    document.querySelector('#meta').textContent=`${(file.size/1024/1024).toFixed(2)} MB · 演示模式`;
-    showToast('后端不可用，已切换到演示模式');
+    localStorage.removeItem('resumeParsed');
+    document.querySelector('#meta').textContent=`${(file.size/1024/1024).toFixed(2)} MB · 解析失败，可重试`;
+    let retry=document.querySelector('#retryParse');if(!retry){retry=document.createElement('button');retry.id='retryParse';retry.type='button';retry.className='quiet-button';retry.textContent='重试解析';document.querySelector('#uploaded').append(retry)}retry.onclick=()=>acceptFile(file);
+    showToast(error.message||'解析失败，请重试');
   }
 }
 if(fileInput&&drop&&uploaded){drop.addEventListener('click',()=>fileInput.click());drop.addEventListener('dragover',event=>{event.preventDefault();drop.classList.add('dragging')});drop.addEventListener('dragleave',()=>drop.classList.remove('dragging'));drop.addEventListener('drop',event=>{event.preventDefault();drop.classList.remove('dragging');acceptFile(event.dataTransfer.files[0])});fileInput.addEventListener('change',()=>acceptFile(fileInput.files[0]));document.querySelector('#remove').addEventListener('click',()=>{fileInput.value='';uploaded.classList.add('hidden');drop.classList.remove('hidden');localStorage.removeItem('candidateName');localStorage.removeItem('resumeParsed');document.querySelectorAll('.profile strong').forEach(node=>node.textContent='');document.querySelectorAll('.profile-avatar').forEach(node=>node.textContent='');showToast('已移除简历')})}

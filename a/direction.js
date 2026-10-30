@@ -4,72 +4,47 @@ const sessionId=localStorage.getItem('session_id')||crypto.randomUUID();
 localStorage.setItem('session_id',sessionId);
 const form=document.querySelector('.form-list');
 const confirmLink=document.querySelector('a[href="practice.html"]');
+function unique(values){const seen=new Set();return values.map(value=>value.replace(/\s+/g,' ').trim()).filter(value=>value&&!seen.has(value)&&seen.add(value))}
 function extractResumeFields(text=''){
-  const clean=text.replace(/\r/g,'');
-  const lines=clean.split('\n').map(value=>value.trim()).filter(Boolean);
-  const line=pattern=>clean.match(pattern)?.[1]?.trim()||'';
-  const labeled=(labels)=>line(new RegExp(`(?:^|\\n)\\s*(?:${labels})\\s*[：:]\\s*([^\\n]+)`,'i'));
-  const sectionValue=(labels)=>{
-    const index=lines.findIndex(value=>new RegExp(`^(?:${labels})$`,'i').test(value.replace(/[：:]$/,'')));
-    return index>=0?lines[index+1]||'':'';
-  };
-  const projectName=line(/(?:^|\n)\s*([^\n]{2,40}?)(?:\s*[|｜]\s*(?:课程设计|项目经历)|\s*[（(](?:课程设计|项目经历))/i)||sectionValue('项目经历|项目经验|代表项目');
-  return {
-    professional:labeled('专业方向|所学专业|本科专业|专业')||sectionValue('专业方向|所学专业|本科专业|专业'),
-    target:labeled('目标岗位|求职意向|意向岗位|目标方向|就业方向')||sectionValue('目标岗位|求职意向|意向岗位|目标方向|就业方向'),
-    skills:labeled('编程与工具|技术栈|技能关键词|专业技能|技能')||sectionValue('编程与工具|技术栈|技能关键词|专业技能|技能'),
-    projectName,
-    contribution:line(/个人贡献\s*[：:]\s*([\s\S]*?)(?=\n(?:技术方案|调试过程|项目结果)\s*[：:])/i),
-    technicalPlan:line(/技术方案\s*[：:]\s*([\s\S]*?)(?=\n(?:调试过程|项目结果)\s*[：:])/i),
-    debugging:line(/调试过程\s*[：:]\s*([\s\S]*?)(?=\n项目结果\s*[：:])/i),
-    result:line(/项目结果\s*[：:]\s*([^\n]+)/i)
-  };
+  const clean=text.replace(/\r/g,'').replace(/[\u00a0\t]+/g,' ');const lines=unique(clean.split('\n').map(value=>value.trim()).filter(Boolean));
+  const line=pattern=>clean.match(pattern)?.[1]?.trim()||'';const labeled=labels=>line(new RegExp(`(?:^|\\n)\\s*(?:${labels})\\s*[：:]\\s*([^\\n]+)`,'i'));
+  const sectionValue=labels=>{const index=lines.findIndex(value=>new RegExp(`^(?:${labels})[：:]?$`,'i').test(value));return index>=0?lines[index+1]||'':''};
+  const projectIndex=lines.findIndex(value=>/项目经历|项目经验|代表项目/i.test(value));
+  const projectName=line(/(?:^|\n)\s*([^\n]{2,60}?)(?:\s*[|｜]\s*(?:课程设计|项目经历)|\s*[（(](?:课程设计|项目经历))/i)||(projectIndex>=0?lines[projectIndex+1]||'':'');
+  const nameIndex=projectName?lines.findIndex(value=>value.includes(projectName)):projectIndex;const stop=/^(教育经历|工作经历|实习经历|获奖经历|证书|专业技能|技能|自我评价|个人信息|联系方式|校园经历)/i;
+  const afterProject=nameIndex>=0?lines.slice(nameIndex+1):[];const stopIndex=afterProject.findIndex(value=>stop.test(value));const projectLines=afterProject.slice(0,stopIndex<0?32:stopIndex);
+  const block=(startLabels,endLabels)=>{const start=new RegExp(`(?:^|\\n|[。；])\\s*(?:${startLabels})\\s*[：:]\\s*`,'i').exec(clean);if(!start)return '';const rest=clean.slice(start.index+start[0].length);const end=new RegExp(`(?:\\n|[。；])\\s*(?:${endLabels})\\s*[：:]`,'i').exec(rest);return rest.slice(0,end?end.index:rest.length).trim()};
+  const explicit={contribution:block('个人贡献|个人职责','技术方案|调试过程|项目结果'),technicalPlan:block('技术方案','调试过程|项目结果'),debugging:block('调试过程','项目结果'),result:block('项目结果','项目经历|教育经历|工作经历|专业技能|技能|自我评价')};
+  const buckets={contribution:[],technicalPlan:[],debugging:[],result:[]};const rules=[['result',/获得|荣获|金奖|银奖|铜奖|奖项|成果|提升\s*\d|缩短|达到|完成率|交付/],['debugging',/调试|故障|问题|排查|解决|优化|误差|异常|测试|验证/],['contribution',/负责|参与|承担|协助|主导|完成/],['technicalPlan',/设计|采用|基于|使用|搭建|开发|算法|SolidWorks|PCB|STM|CAD|FreeRTOS|传感器/]];
+  const projectSentences=unique(projectLines.join('').split(/(?<=[。！？；])/));
+  for(const value of projectSentences){const bucket=rules.find(([,pattern])=>pattern.test(value))?.[0];if(bucket)buckets[bucket].push(value)}
+  const cleanField=value=>unique(value.split('\n').map(item=>item.replace(/^[\u4e00-\u9fa5]{1,2}[，、：]\s*/,'').replace(/^[，。；：、,.!?！？)）】》]+/,'').trim()).filter(item=>item&&!/^[\u4e00-\u9fa5]{1,2}[，。；：]$/.test(item))).join('\n');
+  const fallback=key=>cleanField(unique(buckets[key]).join('\n'));const skills=labeled('编程与工具|技术栈|技能关键词|专业技能|技能')||sectionValue('编程与工具|技术栈|技能关键词|专业技能|技能');
+  const professional=labeled('专业方向|所学专业|本科专业|专业类别|专业')||sectionValue('专业方向|所学专业|本科专业|专业类别|专业');const target=labeled('目标岗位|求职意向|意向岗位|目标方向|就业方向|应聘职位')||sectionValue('目标岗位|求职意向|意向岗位|目标方向|就业方向|应聘职位');
+  const corpus=`${skills} ${projectLines.join(' ')}`;const inferredProfessional=professional||(/机械|SolidWorks|CAD|PCB|3D打印|机器人|硬件/i.test(corpus)?'机械与硬件工程':'');const inferredTarget=target||(/机械|SolidWorks|CAD|PCB|3D打印|机器人/i.test(corpus)?'机械结构与硬件开发':(/STM|嵌入式|单片机|FreeRTOS/i.test(corpus)?'嵌入式软件开发':''));
+  return {professional:inferredProfessional,target:inferredTarget,skills,projectName,contribution:cleanField(explicit.contribution)||fallback('contribution'),technicalPlan:cleanField(explicit.technicalPlan)||fallback('technicalPlan'),debugging:cleanField(explicit.debugging)||fallback('debugging'),result:cleanField(explicit.result)||fallback('result')};
 }
-const extracted=extractResumeFields(savedResume?.text||'');
-const sameResume=!!savedResume&&savedProject?.resumeFile===savedResume.fileName;
-const values=sameResume?{...extracted,...savedProject}:extracted;
-document.querySelectorAll('.form-list input[name]').forEach(input=>{input.value=values[input.name]||''});
-const projectSummary=document.querySelector('.selected-project');
-if(projectSummary){
-  projectSummary.querySelector('h2').textContent=values.projectName||'';
-  projectSummary.querySelector('p').textContent=values.technicalPlan||'';
-  const tags=projectSummary.querySelector('.tags');
-  tags.replaceChildren(...(values.skills||'').split(/[、,，·\s]+/).filter(Boolean).map(skill=>{const tag=document.createElement('span');tag.textContent=skill;return tag}));
+const extracted=extractResumeFields(savedResume?.text||'');const sameResume=!!savedResume&&savedProject?.resumeFile===savedResume.fileName;
+function detectProjects(text){
+  const clean=text.replace(/\r/g,'');const sectionStart=clean.search(/(?:^|\n)\s*(?:项目经历|项目经验|代表项目)\s*\n/i);if(sectionStart<0)return [extracted];
+  const section=clean.slice(sectionStart);const header=/^\s*(.{4,100}?)\s+(20\d{2}[年./-]\d{1,2}\s*(?:月)?\s*[-至]\s*(?:20\d{2}[年./-]\d{1,2}\s*(?:月)?|至今|现在))\s*$/gim;const headers=[];let match;
+  while((match=header.exec(section))){const name=match[1].replace(/\s+/g,' ').trim();if(!/负责人|主持人|总负责人|硬件负责人|实习生|学生负责人/.test(name))headers.push({name,period:match[2].replace(/\s+/g,' '),index:match.index,end:header.lastIndex})}
+  if(!headers.length){const inline=/([^。\n]{2,60}?)[（(][^）)]*?(20\d{2}[年./-]\d{1,2}[^）)]*)[）)]/g;const inlineProjects=[];let inlineMatch;while((inlineMatch=inline.exec(section))){inlineProjects.push({name:inlineMatch[1].trim(),period:inlineMatch[2].replace(/\s+/g,' '),index:inlineMatch.index,end:inline.lastIndex})}if(inlineProjects.length){return inlineProjects.map((item,index)=>{const end=index+1<inlineProjects.length?inlineProjects[index+1].index:section.length;const body=section.slice(item.end,end);const parsed=extractResumeFields(`项目经历\n${item.name} ${item.period}\n${body}`);return {...parsed,projectName:`${item.name} ${item.period}`,period:item.period}})}}
+  if(!headers.length)return [extracted];
+  const projects=headers.map((item,index)=>{const end=index+1<headers.length?headers[index+1].index:section.length;const body=section.slice(item.end,end);const parsed=extractResumeFields(`项目经历\n${item.name} ${item.period}\n${body}`);return {...parsed,projectName:`${item.name} ${item.period}`,period:item.period}});
+  return projects;
 }
-function field(label,key,multiline=false){const wrapper=document.createElement('label');wrapper.className='project-field';wrapper.textContent=label;const input=document.createElement(multiline?'textarea':'input');input.name=key;input.value=values[key]||'';if(key==='projectName')input.placeholder='请填写项目名称';if(multiline)input.rows=3;wrapper.append(input);return wrapper}
-let projectError;
-function showProjectError(message){
-  if(!projectError){projectError=document.createElement('p');projectError.className='project-error';projectError.setAttribute('role','alert');document.querySelector('.project-details')?.prepend(projectError)}
-  projectError.textContent=message;
-}
-if(form){
-  const details=document.createElement('section');details.className='project-details';
-  const heading=document.createElement('div');heading.className='details-heading';heading.innerHTML='<strong>项目经历确认</strong><span>可修改后保存</span>';details.append(heading);
-  details.append(field('项目名称','projectName'));
-  details.append(field('个人贡献','contribution',true));
-  details.append(field('技术方案','technicalPlan',true));
-  details.append(field('调试过程','debugging',true));
-  details.append(field('项目结果','result',true));
-  form.parentElement.append(details);
-  const parsedNote=document.createElement('p');parsedNote.className='parsed-note';parsedNote.textContent=savedResume?'已读取刚刚上传的简历，可在这里核对识别结果。':'尚未导入简历，确认信息为空白。';details.prepend(parsedNote);
-  const saveButton=document.createElement('button');saveButton.type='button';saveButton.className='quiet-button save-project';saveButton.textContent='保存修改';saveButton.addEventListener('click',async()=>{try{await saveProject();showProjectError('');saveButton.textContent='已保存';setTimeout(()=>saveButton.textContent='保存修改',1600)}catch(error){showProjectError(error.message);saveButton.textContent='保存失败';setTimeout(()=>saveButton.textContent='保存修改',1600)}});details.append(saveButton);
-}
-async function saveProject(){
-  const data={};document.querySelectorAll('.form-list input[name],.project-field input,.project-field textarea').forEach(input=>{data[input.name]=input.value.trim()});
-  if(!data.projectName){document.querySelector('.project-field input[name="projectName"]')?.focus();throw new Error('请先填写项目名称，再开始陪练。')}
-  data.resumeFile=savedResume?.fileName||'';data.candidateName=savedResume?.candidateName||localStorage.getItem('candidateName')||'';data.session_id=sessionId;data.updatedAt=new Date().toISOString();localStorage.setItem('practiceProject',JSON.stringify(data));
-  const records=JSON.parse(localStorage.getItem('practiceProjects')||'[]');
-  const existingIndex=records.findIndex(record=>record.session_id===sessionId);
-  if(existingIndex>=0)records[existingIndex]={...records[existingIndex],...data};
-  else records.unshift(data);
-  localStorage.setItem('practiceProjects',JSON.stringify(records));
-  const payload={...data,project_name:data.projectName};delete payload.projectName;
-  let response;
-  try{response=await fetch(window.InterviewPracticeApi.url('/api/projects'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});}
-  catch(error){localStorage.setItem('demoMode','true');return {id:'demo',...data};}
-  const result=await response.json();
-  if(!response.ok){localStorage.setItem('demoMode','true');return {id:'demo',...data};}
-  localStorage.setItem('projectId',String(result.id));
-  return result;
-}
+const projects=detectProjects(savedResume?.text||'');
+const selectedIndex=Math.max(0,projects.findIndex(project=>project.projectName&&project.projectName===savedProject?.projectName));
+let activeProject=projects[selectedIndex]||extracted;
+const activeValues=Object.fromEntries(Object.keys(activeProject).map(key=>[key,activeProject[key]|| (key==='professional'||key==='target'||key==='skills'?extracted[key]:'')]));
+Object.assign(activeValues,sameResume&&savedProject?Object.fromEntries(Object.keys(activeValues).map(key=>[key,activeValues[key]||savedProject[key]||''])):{});
+let values=activeValues;
+document.querySelectorAll('.form-list input[name]').forEach(input=>{input.value=values[input.name]||''});const projectSummary=document.querySelector('.selected-project');
+if(projectSummary){projectSummary.querySelector('h2').textContent=values.projectName||'';projectSummary.querySelector('p').textContent=(values.technicalPlan||'').slice(0,220);const tags=projectSummary.querySelector('.tags');tags.replaceChildren(...(values.skills||'').split(/[、,，·\s]+/).filter(Boolean).map(skill=>{const tag=document.createElement('span');tag.textContent=skill;return tag}));if(projects.length>1){const picker=document.createElement('label');picker.className='project-picker summary-picker';picker.textContent=`识别到 ${projects.length} 个项目，选择本轮练习项目`;const select=document.createElement('select');select.name='selectedProjectSummary';projects.forEach((project,index)=>{const option=document.createElement('option');option.value=String(index);option.textContent=project.projectName||`项目 ${index+1}`;option.selected=index===selectedIndex;select.append(option)});select.addEventListener('change',()=>{activeProject=projects[Number(select.value)]||extracted;values=activeProject;Object.keys(renderedFields).forEach(key=>{renderedFields[key].value=values[key]||''});projectSummary.querySelector('h2').textContent=values.projectName||'';projectSummary.querySelector('p').textContent=(values.technicalPlan||'').slice(0,220)});picker.append(select);projectSummary.append(picker)}}
+const renderedFields={};
+function field(label,key,multiline=false){const wrapper=document.createElement('label');wrapper.className='project-field';wrapper.textContent=label;const input=document.createElement(multiline?'textarea':'input');input.name=key;input.value=values[key]||'';if(key==='projectName')input.placeholder='请填写项目名称';if(multiline)input.rows=3;renderedFields[key]=input;wrapper.append(input);return wrapper}
+let projectError;function showProjectError(message){if(!projectError){projectError=document.createElement('p');projectError.className='project-error';projectError.setAttribute('role','alert');document.querySelector('.project-details')?.prepend(projectError)}projectError.textContent=message}
+if(form){const details=document.createElement('section');details.className='project-details';const heading=document.createElement('div');heading.className='details-heading';heading.innerHTML='<strong>项目经历确认</strong><span>可修改后保存</span>';details.append(heading);if(projects.length>1){const picker=document.createElement('label');picker.className='project-field project-picker';picker.textContent=`识别到 ${projects.length} 个项目，请选择本轮练习项目`;const select=document.createElement('select');select.name='selectedProject';projects.forEach((project,index)=>{const option=document.createElement('option');option.value=String(index);option.textContent=project.projectName||`项目 ${index+1}`;option.selected=index===selectedIndex;select.append(option)});select.addEventListener('change',()=>{activeProject=projects[Number(select.value)]||extracted;values=activeProject;Object.keys(renderedFields).forEach(key=>{renderedFields[key].value=values[key]||''});const summary=document.querySelector('.selected-project');if(summary){summary.querySelector('h2').textContent=values.projectName||'';summary.querySelector('p').textContent=values.technicalPlan||''}});picker.append(select);details.append(picker)}details.append(field('项目名称','projectName'));details.append(field('个人贡献','contribution',true));details.append(field('技术方案','technicalPlan',true));details.append(field('调试过程','debugging',true));details.append(field('项目结果','result',true));form.parentElement.append(details);const parsedNote=document.createElement('p');parsedNote.className='parsed-note';parsedNote.textContent=savedResume?'已读取刚刚上传的简历，可在这里核对识别结果。':'尚未导入简历，确认信息为空白。';details.prepend(parsedNote);if(savedResume?.text){const sourceLabel=document.createElement('label');sourceLabel.className='project-field resume-source';sourceLabel.textContent='简历原文（可滚动查看）';const source=document.createElement('textarea');source.readOnly=true;source.value=savedResume.text;source.setAttribute('aria-label','简历原文');sourceLabel.append(source);details.insertBefore(sourceLabel,details.children[1])}const saveButton=document.createElement('button');saveButton.type='button';saveButton.className='quiet-button save-project';saveButton.textContent='保存修改';saveButton.addEventListener('click',async()=>{try{await saveProject();showProjectError('');saveButton.textContent='已保存';setTimeout(()=>saveButton.textContent='保存修改',1600)}catch(error){showProjectError(error.message);saveButton.textContent='保存失败';setTimeout(()=>saveButton.textContent='保存修改',1600)}});details.append(saveButton)}
+async function saveProject(){const data={};document.querySelectorAll('.form-list input[name],.project-field input,.project-field textarea').forEach(input=>{data[input.name]=input.value.trim()});if(!data.projectName){document.querySelector('.project-field input[name="projectName"]')?.focus();throw new Error('请先填写项目名称，再开始陪练。')}data.resumeFile=savedResume?.fileName||'';data.candidateName=savedResume?.candidateName||localStorage.getItem('candidateName')||'';data.session_id=sessionId;data.updatedAt=new Date().toISOString();localStorage.setItem('practiceProject',JSON.stringify(data));const records=JSON.parse(localStorage.getItem('practiceProjects')||'[]');const existingIndex=records.findIndex(record=>record.session_id===sessionId);if(existingIndex>=0)records[existingIndex]={...records[existingIndex],...data};else records.unshift(data);localStorage.setItem('practiceProjects',JSON.stringify(records));const payload={...data,project_name:data.projectName};delete payload.projectName;let response;try{response=await fetch(window.InterviewPracticeApi.url('/api/projects'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})}catch(error){localStorage.setItem('demoMode','true');return {id:'demo',...data}}const result=await response.json();if(!response.ok){localStorage.setItem('demoMode','true');return {id:'demo',...data}}localStorage.setItem('projectId',String(result.id));return result}
 if(confirmLink)confirmLink.addEventListener('click',async event=>{event.preventDefault();try{await saveProject();showProjectError('');window.location.href=confirmLink.href}catch(error){showProjectError(error.message)}});
