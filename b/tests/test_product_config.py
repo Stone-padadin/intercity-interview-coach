@@ -46,3 +46,15 @@ class ProductConfigTests(unittest.TestCase):
 
     def test_missing_product_remains_explicit_offline_identity(self):
         self.assertEqual(module.product_identity(self.path), (0, "UNCONFIGURED"))
+
+    def test_idf_environment_excludes_diagnostic_pythonpath(self):
+        sdk = self.root / "external/vendor-sdk"
+        (sdk / "esp-idf/tools").mkdir(parents=True)
+        (sdk / "esp-idf/tools/tools.json").write_text('{"tools": []}', encoding="utf-8")
+        python = self.root / ".local/idf-tools/python_env/idf5.4_py3.12_env/Scripts/python.exe"
+        python.parent.mkdir(parents=True)
+        python.touch()
+        with patch.object(module, "ROOT", self.root), patch.object(module, "SDK", sdk), patch.dict(module.os.environ, {"PYTHONPATH": "unrelated-device-packages"}):
+            selected, env = module.environment()
+        self.assertEqual(selected, python)
+        self.assertNotIn("PYTHONPATH", env)
