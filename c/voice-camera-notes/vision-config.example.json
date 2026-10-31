@@ -1,0 +1,5 @@
+{
+  "base_url": "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+  "model": "qwen3.7-flash",
+  "api_key": "FILL_LOCALLY"
+}

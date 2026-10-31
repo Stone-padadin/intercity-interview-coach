@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>小灵 · 实验随手记</title><link rel="stylesheet" href="/style.css"></head>
+<body><main>
+<header><div><span class="eyebrow">小灵实验助教 · 联动试用</span><h1>动手做，开口记。</h1><p>把一句口述和一张现场照片，留在同一条实验记录里。</p></div><span id="connection" class="badge">等待开发板</span></header>
+<section class="capture"><div class="view"><img id="preview" alt="摄像头实时取景"><div id="placeholder">开启摄像头，把电路和仪表完整放进画面</div><span class="live" id="cameraBadge">摄像头未开启</span></div>
+<div class="guide"><span class="step">01 · 确认取景</span><h2>先让画面拍对地方</h2><p>让测量位置、仪表屏幕和操作区域同时入镜。</p><div class="actions"><button id="start">开启摄像头</button><button id="stop" class="secondary">关闭摄像头</button></div>
+<span class="step second">02 · 开口记录</span><blockquote>“你好小灵，记一下，<br>我刚把这根线移到另一排。”</blockquote><p>每条话都以“记一下”开头，并说出具体内容。看到下方记录后，核对照片和文字，再确认保存。</p><p class="hint">截图取自收到完整转写附近的画面，可能晚于你开口的时刻。口述保留为本人报告，不自动当作仪器读数。</p></div></section>
+<section class="records"><h2>看图问答 · 静音</h2><p id="visionStatus">正在检查模型配置</p><textarea id="question" maxlength="2000" aria-label="向视觉助教提问" placeholder="例如：请描述画面；哪里看不清，需要我怎么调整？"></textarea><p><label><input type="checkbox" id="uploadConsent">我同意本次点击把照片和问题发送给已配置的模型服务；分析记录时也会发送该条口述。</label></p><button id="askFrame">发送当前画面并提问</button><p id="visionProgress" role="status"></p><p>模型回答仅供核对，不会自动修改或确认实验记录。没有语音播放。</p><pre id="visionAnswer"></pre></section>
+<section class="records"><div class="section-head"><div><span class="eyebrow">这轮试用</span><h2>实验记录 <span id="count">0</span></h2></div><p>本页记录保存在这台电脑。<br>以本页“已确认”状态为保存回执。</p></div>
+<div id="message" role="status"></div><div id="empty">还没有记录。相机就绪后，说“你好小灵，记一下，……”开始。</div><div id="notes"></div></section>
+<footer>当前试用：语音照片记录与单次看图问答。只有点击发送才上传照片；模型回答不代表仪器实测或操作已经执行。</footer>
+</main><script src="/app.js"></script></body></html>
