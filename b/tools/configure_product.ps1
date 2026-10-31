@@ -10,7 +10,7 @@ $secureProductSecret = Read-Host 'Product SECRET (hidden)' -AsSecureString
 $productSecret = [System.Net.NetworkCredential]::new('', $secureProductSecret).Password
 try {
     if ($productSecret -notmatch '^[A-Za-z0-9_-]{8,32}$') {
-        throw 'This SDK accepts 8-32 ASCII secret characters. Recopy the complete value from PID 11814; do not truncate. No configuration saved.'
+        throw "This SDK accepts 8-32 ASCII secret characters. Recopy the complete value from PID $productNumber; do not truncate. No configuration saved."
     }
     $localDirectory = Join-Path $repoRoot '.local'
     New-Item -ItemType Directory -Force -Path $localDirectory | Out-Null
