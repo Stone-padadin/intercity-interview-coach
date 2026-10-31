@@ -110,6 +110,10 @@ static void on_event(void *arg,qm_event_base_t base,int32_t kind,void *ptr,size_
     }
     context_t ctx=s_context;
     portEXIT_CRITICAL(&s_lock);
+    if (kind==QM_AGENT_EVENT_CONNECTED) {
+        /* record may precede Agent startup; refresh upload now that it is running. */
+        (void)agent_app_set_resource_mode(ctx.mode==2?QM_TRUE:QM_FALSE);
+    }
     if (kind!=QM_AGENT_EVENT_ASR && kind!=QM_AGENT_EVENT_TTS && kind!=QM_AGENT_EVENT_AGENT_TEXT) return;
     if (!n->data.text.final || !ctx.experiment[0] || (ctx.mode!=1 && ctx.mode!=2 && ctx.mode!=3)) return;
     event_t e={.context=ctx,.time=now_ms(),.kind=kind,.notice=*n};
