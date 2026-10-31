@@ -209,6 +209,19 @@ def deliver_one(store, base, now):
     return True
 
 
+def enqueue_commands(commands, experiment, now, store, outgoing):
+    for command in commands:
+        if outgoing.full():
+            break
+        try:
+            encoded = encode_command(command, experiment, now)
+            if store.claim_command(command):
+                outgoing.put_nowait((command, encoded))
+        except (ValueError, queue.Full):
+            # A keeps commands until acknowledged; one stale item must not starve later work.
+            continue
+
+
 def run(port, base, experiment, database):
     import serial
     store, clock, outgoing, done = Outbox(database), Clock(), queue.Queue(maxsize=16), threading.Event()
@@ -224,12 +237,7 @@ def run(port, base, experiment, database):
                     url = base+'/api/lab/device-commands?'+parse.urlencode({'experiment_id': experiment})
                     code, result = json_request(url)
                     if code == 200 and isinstance(result, dict) and isinstance(result.get('commands'), list):
-                        for command in result['commands'][:16]:
-                            encoded = encode_command(command, experiment, int(time.time()*1000))
-                            if outgoing.full():
-                                break
-                            if store.claim_command(command):
-                                outgoing.put_nowait((command, encoded))
+                        enqueue_commands(result['commands'], experiment, int(time.time()*1000), store, outgoing)
                 except (OSError, ValueError, queue.Full):
                     pass
             done.wait(.05)

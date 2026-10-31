@@ -1,5 +1,6 @@
 """Synthetic events and loopback HTTP only; these tests never open a board."""
 import json
+import queue
 from pathlib import Path
 import sys
 import tempfile
@@ -155,6 +156,40 @@ class StoreTests(unittest.TestCase):
 
 
 class CommandTests(unittest.TestCase):
+    def test_old_prefix_longer_than_queue_capacity_does_not_starve_new_work(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = bridge.Outbox(Path(temp)/'commands.db'); outgoing = queue.Queue(16)
+            try:
+                stale = [command(command_id=f'old_{i}', expires_at_ms=500) for i in range(20)]
+                bridge.enqueue_commands(stale+[command(command_id='valid')], 'synthetic_exp', 1000, store, outgoing)
+                self.assertEqual(outgoing.get()[0]['command_id'], 'valid')
+            finally:
+                store.close()
+
+    def test_stale_or_malformed_command_does_not_block_next_command(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = bridge.Outbox(Path(temp)/'commands.db'); outgoing = queue.Queue(16)
+            try:
+                commands = [command(expires_at_ms=500), command('mode', [], command_id='malformed'),
+                            command(command_id='valid')]
+                bridge.enqueue_commands(commands, 'synthetic_exp', 1000, store, outgoing)
+                self.assertEqual(outgoing.qsize(), 1)
+                self.assertEqual(outgoing.get()[0]['command_id'], 'valid')
+            finally:
+                store.close()
+
+    def test_conflicting_duplicate_does_not_block_next_command(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = bridge.Outbox(Path(temp)/'commands.db'); outgoing = queue.Queue(16)
+            try:
+                store.claim_command(command())
+                bridge.enqueue_commands([command(arg='changed'), command(command_id='valid')],
+                                        'synthetic_exp', 1000, store, outgoing)
+                self.assertEqual(outgoing.qsize(), 1)
+                self.assertEqual(outgoing.get()[0]['command_id'], 'valid')
+            finally:
+                store.close()
+
     def test_speech_utf8_hex_and_device_ttl(self):
         encoded = bridge.encode_command(command(arg='A\n"甲"'), 'synthetic_exp', 1000)
         fields = encoded.decode().strip().split()
