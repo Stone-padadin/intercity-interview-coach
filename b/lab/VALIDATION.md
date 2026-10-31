@@ -55,3 +55,11 @@ D 新提供 PID 11919，产品与旧 PID 11814 不同。本机分别验证新密
 ### PID 11919 追加播报检查
 
 在新的诊断实验中，analysis 获匹配的 mode_set 后，下发唯一短句“实验助教联调，编号七三六。”。设备返回 queued 与 request_or_wait_failed，未见 submitted 或播放完成证据；本轮不能判定播报通过，也不能据此单独归因于提示词、配网或硬件。随后切回 record，并收到对应 mode_set。采集窗口尚未收到新的 final ASR；需用户先实际唤醒、口述，再核对新产品的语音会话与回复。没有自动重发新命令 ID 来掩盖失败。
+
+### PID 11919 新会话语音定位
+
+用户再次报告无声后，仅通过 EN 重启设备以新建会话，未重刷、未清 Wi-Fi/NVS；启动记录确认 PID=11919、online=1。用户实际唤醒时，qm_agent_start ret=0，状态 ready→starting→running，Agora join_success / connected，并见第一帧 OPUS 上行。该观察窗口未见远端 user_joined、ASR、TTS 或播放开始事件，不能以加入房间代替端到端语音成功。
+
+在这次已连接的会话切 analysis 后，以新的独立命令发送诊断句“实验语音检查，编号八一五。”；设备明确返回 request_or_wait_failed。私密 SDK 日志出现 user corpus auth unavailable ret=-12；固定 SDK 的调用在无法取得当前授权信息或缺少 ljyd.token 时可以返回 -QM_ENOENT（12），尚未出现 HTTP 请求提交/响应证据。不能把这个错误解释为 API 密钥字符长度错误、摄像头缺失或喇叭损坏，也不能仅据此断定平台绑定一定错误。随后 record 切换收到确认。
+
+下一检查项：确认这块设备切至新 PID 后是否在小程序完成该产品的账号绑定；由 D 对照新产品实际设备 SN 检查已发布 Agent 的关联和这次鉴权/语音运行日志。不要为测试关闭鉴权、把 RTC 凭据当网页 API 密钥，或在未核对前清整片 Flash。原始日志仍仅在 ignored .local 中保存。
