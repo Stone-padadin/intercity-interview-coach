@@ -6,16 +6,18 @@
 web
 
 ## Stack
-delegated: static HTML CSS and JavaScript for the first demo
+Static HTML, CSS and JavaScript; Node.js standard-library local server. Browser localStorage for this prototype. Legacy interview dependencies remain locked for historical regression only.
 
 ## Users
-Students and early career candidates preparing for embedded development interviews.
+Electronic, automation and embedded-systems learners recording and troubleshooting real bench experiments.
 
 ## Product Purpose
-Turn a resume project into a focused interview practice session.
+Keep confirmed measurements and experimental conditions together so a learner can compare retests and choose the next verification. The intended full product adds spoken measurements and historical visual evidence; that integration is not complete.
 
 ## Capabilities and Constraints
-The first demo covers resume upload, project context, practice entry, and a reserved future area for voice camera and hardware. Real parsing AI evaluation and device integration remain later work.
+Implemented: experiment creation and switching, manual measurement draft and explicit confirmation, browser persistence, experiment isolation, linked retests, reversible retraction, manual review and Markdown export.
+
+Not integrated: device ASR, video playback, ten-minute rolling history, region selection, AI evidence analysis, device output and shared platform context. No automatic instrumentation, safety certification, diagnostic accuracy or learning-outcome claims.
 
 ## Brand Commitments
-Calm soft clear fluid and Apple inspired.
+Quiet, readable and grounded in real bench work. Warm neutral surfaces, deep green emphasis, visible record provenance. Separate observations from hypotheses and actual capabilities from planned integration.

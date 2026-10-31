@@ -1,11 +1,54 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>总览 · 难开口陪练</title><link rel="stylesheet" href="styles.css?v=20261029-pages"></head>
-<body><div class="app-shell"><aside class="sidebar">
-  <div class="brand"><div class="brand-mark">难</div><div><strong>难开口陪练</strong><small>面试准备空间</small></div></div>
-  <a class="new-button" href="resume.html">＋ 新建练习</a>
-  <nav class="main-nav" aria-label="主导航"><a class="nav-item active" href="index.html"><span>⌂</span>总览</a><a class="nav-item" href="resume.html"><span>▤</span>填写简历</a><a class="nav-item" href="direction.html"><span>◇</span>确认方向</a><a class="nav-item" href="practice.html"><span>◉</span>开始陪练</a><a class="nav-item" href="history.html"><span>◷</span>练习记录</a></nav>
-  <div class="nav-divider"></div><a class="nav-item" href="settings.html"><span>⚙</span>设置</a>
-  <div class="profile"><div class="profile-avatar"></div><div><strong></strong><small>本地演示模式</small></div></div>
-</aside><main class="main-content"><header class="topbar"><div class="breadcrumbs"><span>总览</span><span>/</span><strong>准备开始</strong></div><div class="saved"><i></i> 已自动保存</div></header>
-<section class="page active"><div class="home-layout"><div><p class="eyebrow">面试准备空间</p><h1>把你的经历，<em>说得更清楚。</em></h1><p class="lead">从一份简历开始，选择一个真实项目，进入一段可以反复练习的面试路径。</p><a class="primary-button" href="resume.html">开始准备 <span>→</span></a></div><div class="orbit"><b>练</b><span>简历</span><span>项目</span><span>反馈</span></div></div><div class="home-links"><a href="resume.html"><span>01</span><strong>填写简历</strong><small>上传你的 Word 或 PDF 简历</small><b>→</b></a><a href="direction.html"><span>02</span><strong>确认方向</strong><small>选择要练习的项目和岗位</small><b>→</b></a><a href="practice.html"><span>03</span><strong>开始陪练</strong><small>进入语音和硬件交互区域</small><b>→</b></a></div></section></main></div><script src="profile.js?v=20261029-pages"></script></body></html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="AI 实验台助教原型：确认测量、留下记录、带着证据复测。">
+  <title>AI 实验台助教 · 实验记录</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="lab.css">
+  <script src="lab-store.js" defer></script>
+  <script src="lab.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">∿</span><span>AI 实验台助教<small>INTERCITY HACK / 实验记录原型</small></span></a>
+    <span class="local-badge">记录保存在当前浏览器</span>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div><p class="eyebrow">动手实验，也留住思路。</p><h1 id="hero-title">让每次复测，<br>都有据可循。</h1><p class="lead">记下测到的数值，保留当时的条件。遇到问题时，从记录出发，决定下一步验证什么。</p><a class="button primary" href="#experiment-name">开始记录 <span aria-hidden="true">↗</span></a></div>
+      <div class="flow-card"><p class="eyebrow">一条实验记录的路径</p><ol><li><span>01</span><div><strong>记录测量</strong><small>位置、数值、单位与条件</small></div></li><li><span>02</span><div><strong>核对后保存</strong><small>让事实和猜测分开</small></div></li><li><span>03</span><div><strong>提出验证，再复测</strong><small>用前后记录梳理变化</small></div></li></ol><p class="caption">当前支持手动记录；语音、视频回溯与 AI 分析待接入。</p></div>
+    </section>
+    <p id="notice" class="notice" role="status" aria-live="polite" hidden></p>
+    <section class="workspace" aria-label="实验工作区">
+      <aside class="panel experiments">
+        <p class="eyebrow">工作区</p><h2>我的实验</h2>
+        <label for="experiment-select">切换实验</label><select id="experiment-select" disabled><option value="">还没有实验</option></select>
+        <form id="experiment-form">
+          <h3>新建实验</h3><label for="experiment-name">实验名称</label><input id="experiment-name" name="name" required maxlength="100" placeholder="例如：运放反相放大电路">
+          <label for="experiment-background">电路背景与目标</label><textarea id="experiment-background" name="background" maxlength="2000" rows="3" placeholder="供电、器材、想验证的现象……"></textarea>
+          <button class="button primary" type="submit">创建实验</button>
+        </form>
+        <div class="device-note"><h3>现场能力</h3><p><span class="dot"></span>设备语音 · 尚未接入本页</p><p><span class="dot"></span>录像回溯 · 尚未接入本页</p><p><span class="dot"></span>AI 排错 · 尚未接入本页</p></div>
+      </aside>
+      <div class="experiment-main">
+        <div class="experiment-heading"><div><p class="eyebrow">当前实验</p><h2 id="current-name">从一个真实实验开始</h2><p id="current-background">创建实验后，在这里记录测量与复测。</p></div><button id="export" class="button secondary" disabled>导出复盘</button></div>
+        <section class="panel" aria-labelledby="measurement-title">
+          <div class="section-heading"><h2 id="measurement-title">记一条测量</h2><span class="tag">手动输入</span></div>
+          <form id="measurement-form"><fieldset id="measurement-fields" disabled>
+            <div class="form-grid"><div><label for="point">测量位置 / 测量点</label><input id="point" name="point" required maxlength="100" placeholder="例如：U1 输出对 GND"></div><div><label for="quantity">物理量</label><input id="quantity" name="quantity" required maxlength="60" placeholder="例如：直流电压"></div><div><label for="value">数值</label><input id="value" name="value" type="text" inputmode="decimal" required maxlength="60" placeholder="例如：-2.48"></div><div><label for="unit">单位</label><input id="unit" name="unit" required maxlength="30" placeholder="例如：V"></div></div>
+            <label for="conditions">测量条件</label><input id="conditions" name="conditions" required maxlength="500" placeholder="例如：±5 V 供电，输入 0.5 V，万用表直流档">
+            <label for="retest-of">这是哪条测量的复测？</label><select id="retest-of" name="retest_of"><option value="">首次测量 / 不关联</option></select>
+            <div class="form-footer"><p>手动输入不会触发仪表采集或语音识别。</p><button class="button primary" type="submit">核对这条测量</button></div>
+          </fieldset></form>
+          <div id="confirmation" class="confirmation" hidden><h3>保存前，再核对一次</h3><p id="draft-summary"></p><div class="actions"><button id="confirm" class="button primary">确认并保存</button><button id="revise" class="button secondary">返回修改</button></div></div>
+        </section>
+        <section class="panel" aria-labelledby="records-title"><div class="section-heading"><h2 id="records-title">已确认测量</h2><span id="record-count" class="tag">0 条</span></div><p id="empty-records" class="empty">还没有已确认测量。填写后核对，确认保存才会出现在这里。</p><div id="records" class="records"></div></section>
+        <section class="panel" aria-labelledby="review-title"><div class="section-heading"><h2 id="review-title">下一步，验证什么？</h2><span class="tag">人工复盘</span></div><p class="section-note">记录你自己的判断；本页尚未调用 AI，也未分析视频。</p><form id="review-form"><fieldset id="review-fields" disabled><label for="issue">观察到的问题</label><textarea id="issue" name="issue" maxlength="2000" rows="2" placeholder="只描述看到或测到的现象"></textarea><label for="hypothesis">候选原因</label><textarea id="hypothesis" name="hypothesis" maxlength="2000" rows="2" placeholder="这是待验证的推断，不是已确定结论"></textarea><label for="next-step">下一项验证</label><textarea id="next-step" name="next_step" maxlength="2000" rows="2" placeholder="下一次测哪里？什么结果能区分这些原因？"></textarea><label for="conclusion">复测后的发现</label><textarea id="conclusion" name="conclusion" maxlength="2000" rows="2" placeholder="引用上面的测量编号，写下变化与仍未知的部分"></textarea><button class="button primary" type="submit">保存复盘</button></fieldset></form></section>
+      </div>
+    </section>
+    <footer>原型阶段 · 手动记录可用，硬件与 AI 闭环待验收。<br>记录仅保存在当前浏览器，清除网站数据会丢失；请及时导出复盘。</footer>
+  </main>
+</body>
+</html>

@@ -1,4 +1,6 @@
-# CloudBase 国内站部署
+# 历史面试服务 CloudBase 部署
+
+2026-10-31：以下是旧面试服务的历史配置，本次没有重新检查线上状态，也没有部署。新实验记录原型使用浏览器存储，默认 `server.js` 不再提供简历/项目写入 API。旧实现已保存在 `legacy-server.js` 和 `legacy/interview/`；不要直接按旧命令用整个 `a/` 覆盖在线服务。`scf_bootstrap` 显式指向旧 `legacy-server.js`，保留历史服务入口；新路线部署前需重新审阅入口、绑定地址、存储与发布范围。
 
 当前 A 模块已部署到 CloudBase 国内站的 HTTP 云函数：
 
