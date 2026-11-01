@@ -51,7 +51,8 @@ def ready(state, now):
     return (state.get('enabled') is True and state.get('checkpoint_pushed') is True
             and state.get('status') in ('waiting_quota', 'waiting_time')
             and isinstance(state.get('resume_after'), (int, float))
-            and now >= state['resume_after'])
+            and now >= state['resume_after']
+            and now-state.get('heartbeat',0)>=300)
 
 
 def atomic_json(path, data):
@@ -64,8 +65,9 @@ def launch_args(state):
     session = state['session_id']
     import uuid
     uuid.UUID(session)
-    return [state['codex_exe'], '--ask-for-approval', 'never', '--sandbox', 'workspace-write',
-            'exec', 'resume', session, '-']
+    args=[state['codex_exe'], '--ask-for-approval', 'never', '--sandbox', 'workspace-write']
+    if state.get('workspace'):args+=['--cd',state['workspace']]
+    return args+['exec', 'resume', session, '-']
 
 
 def run(path):

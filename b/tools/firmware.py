@@ -13,6 +13,8 @@ SDK=ROOT/'external/vendor-sdk'
 def environment():
     tools=ROOT/'.local/idf-tools'
     env=os.environ.copy()
+    # Device diagnostic packages must not shadow the isolated IDF environment.
+    env.pop('PYTHONPATH',None)
     env.update(ADF_PATH=str(SDK),IDF_PATH=str(SDK/'esp-idf'),IDF_TOOLS_PATH=str(tools),
                IDF_COMPONENT_CACHE_PATH=str(ROOT/'.local/component-cache'),PYTHONIOENCODING='utf-8')
     metadata=json.loads((SDK/'esp-idf/tools/tools.json').read_text())

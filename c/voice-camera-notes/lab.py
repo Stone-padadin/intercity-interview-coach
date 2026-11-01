@@ -108,7 +108,7 @@ class Lab:
 
     def state(self):
         return {'experiment_id': self.notes.experiment, 'media': self.list('demo_media'), 'measurements': self.list('demo_measurements'),
-                'analyses': self.list('demo_analyses'), 'context': self.context,
+                'analyses': [a for a in self.list('demo_analyses') if a.get('review_status') != 'superseded'], 'context': self.context,
                 'voice_acceptance': '真人口述验收尚待执行；页面数据不自动证明实物通过'}
 
     def import_video(self, stream, size, meta):
@@ -363,6 +363,8 @@ class Lab:
                 lines.append(f"- {mark}{item['point']}：{item['value']} {item['unit']}；{item['conditions']}；来源 {item['source']}；事件 {item['event_id']}")
         lines+=['','## AI 分析（待核对）']
         for item in self.list('demo_analyses'):
+            if item.get('review_status') == 'superseded':
+                continue
             lines+=['',f"### {item['mode']} / {item['created_at']}",item['answer'],
                     '证据：'+', '.join(f"{r['media_id']} @ 导入文件 {r['seconds']:.3f}s / 来源原片 {r.get('source_seconds',r['seconds']):.3f}s" for r in item['evidence'])]
         return '\n'.join(lines)
