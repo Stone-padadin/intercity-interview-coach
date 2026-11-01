@@ -1,0 +1,41 @@
+# 四功能案例与素材署名
+
+本轮使用已有真实视频，现场运行分析。素材时间是原片时间，不能冒充现场采集；不要求队友重演危险。原始视频只保留本机ignored目录，不进Git。
+
+## 1. 实验数据记录 + 4. 历史辅助排错
+来源：https://archive.org/details/UvLedAsASensorHookedUpToAMultimeter
+作者：Wendy Van Wynsberghe，2015-08-12；许可CC BY-SA 4.0（已核验元数据）。
+原文件：https://archive.org/download/UvLedAsASensorHookedUpToAMultimeter/USER2511.mp4
+34.034秒；SHA256：4a7ce378f874f11e9a9688ed14054ee103e37210c3fa3586b8cddf935ce90792。
+内容：LED作为传感器接万用表；不能把视频中的负载条件猜成空载。
+
+记录演示：选择该视频，停在4秒，关联当前位置。用“你好小灵”唤醒，口述实际读数。可说“电压0.0733V”，在网页补LED1与“视频示值，实际负载未知”，用户确认后刷新回读。73.3mV等于0.0733V，不得记为73.3V。来源始终是用户口述，不是仪器自动采样。
+
+历史演示：模式history、起点4秒、当前20秒，问题“这些读数差很多，结合历史画面，给出观察、待验证因素和一个优先验证步骤。”三帧实际约3.971/11.979/19.987秒，示值73.3mV/0.275V/25.7mV。真实模型曾正确统一单位并列出光源位置/接触状态两个候选，要求固定条件复测；这是候选验证辅助，不是确定故障结论。
+
+## 3. 接线补证与指导（限定案例）
+来源：https://www.khanacademy.org/science/electrical-engineering/robots/spout-bot-with-solder/v/spout-led-eye-wiring
+作者：Karl Wendt / Khan Academy；页面许可CC BY-NC-SA 4.0，本次非商业展示署名并保留相同许可。
+官方文件：https://cdn.kastatic.org/ka-youtube-converted/cyCad5HaHaE.mp4/cyCad5HaHaE.mp4
+本机片段截原片150—450秒，缩至1280宽、去除音轨；变更须注明。界面引用包含150秒原片偏移。
+
+当前可复现：导入片段60秒=原片210秒，看到两个LED，询问引脚极性和下一步核对。模型目前能识别元件，但因遮挡不能确定极性，按限定模板请求引脚近照/型号资料。不能称“任意电路自动接线”或“已完成接线”。此前自由文本指导包含不合适的试接建议，已弃用；旧调试原始结果保留本地，不进入当前展示/导出。
+
+## 2. 危险操作提醒（未通过正例）
+来源：https://www.khanacademy.org/science/electrical-engineering/robots/spout-bot-with-solder/v/soldering-saftey
+作者Karl Wendt / Khan Academy；CC BY-NC-SA 4.0，保留署名及许可。
+官方文件：https://cdn.kastatic.org/ka-youtube-converted/gW-7yeUW7-k.mp4/gW-7yeUW7-k.mp4
+172.739秒；SHA256：6fec84a8e468d991b8621da3a5938520f6ddd21467602041e9ceeab1ce3d6f2e。
+
+36.4—36.8秒电线与支架关系存在视觉歧义，不能证明温度/接触。多次模型判clear；39秒对照曾判clear，一次超时。该候选不作为正例通过；需换明确实拍危险操作素材再验收，不注入预设答案。实测单次推理约5—10秒，不足以宣称事故发生前制止。
+安全资料参考：https://research.columbia.edu/ehs/safely-handling-solder 。资料是风险依据，不等于当前画面的事实。
+
+## 三分钟讲述与备份
+0:00—0:20：展示四项目标、说明本次实拍素材和实机语音边界。
+0:20—1:05：开发板口述→网页草稿→用户确认→刷新，说明mV/V与来源。
+1:05—1:45：历史4—20秒分析→三张证据→候选原因→一次控制变量复测建议。
+1:45—2:15：LED画面→极性不清→请求补图/资料，展示可信度边界。
+2:15—2:40：危险提醒入口与当前未通过正例，说明延迟及后续硬件联动。
+2:40—3:00：导出记录、数据归属、下一阶段平台和设备闭环。
+
+录屏必须是实际运行；旧结果可作为注明生成时间的回放，不能伪装实时分析。当前四段成片尚未产出。提交前核对比赛是否接受素材演示，不把软件入口当原赛题全部验收。
