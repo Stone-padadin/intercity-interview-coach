@@ -19,7 +19,7 @@
     const asset=assets.find(item=>item.id===active);
     if(asset) {
       video.src='/media/'+active+'.mp4';
-      el('mediaInfo').textContent=asset.title+' · '+asset.author+' · '+asset.duration_seconds.toFixed(1)+' 秒 · '+(asset.real_footage_claimed?'用户标记实拍，内容仍须核验':'素材类型待核验');
+      el('mediaInfo').textContent=asset.title+' · '+asset.author+' · '+asset.duration_seconds.toFixed(1)+' 秒 · 原片起点 '+(asset.source_offset_seconds||0)+' 秒 · '+(asset.real_footage_claimed?'用户标记实拍，内容仍须核验':'素材类型待核验');
     } else {video.removeAttribute('src');el('mediaInfo').textContent='';}
   };
   video.onerror=()=>{stopWatch();status('视频不能播放。请使用 H.264 编码的 MP4，并检查文件是否缺失。');};
@@ -39,7 +39,7 @@
     try {
       if(!active)throw new Error('请先选择视频。');
       const data=await post('/api/demo/context',{media_id:active,seconds:video.currentTime});
-      el('boundContext').textContent='下一条口述关联：原片 '+data.seconds.toFixed(3)+' 秒（用户选定，不是实时拍摄时刻）。';
+      el('boundContext').textContent='下一条口述关联：原片 '+data.source_seconds.toFixed(3)+' 秒（用户选定，不是实时拍摄时刻）。';
     }catch(e){status(e.message);}
   };
   function showAnalysis(item) {
@@ -47,11 +47,11 @@
     const article=document.createElement('article');article.className='analysis-card';
     const title=document.createElement('h3');title.textContent=({safety:'危险提醒',wiring:'接线指导',history:'历史排错'}[item.mode]||item.mode)+' · AI 生成待核对';article.append(title);
     const body=document.createElement('pre');body.textContent=item.answer;article.append(body);
-    const time=document.createElement('p');time.textContent='实际请求耗时 '+(item.elapsed_seconds??'未知')+' 秒；原片播放位置 '+item.playhead.toFixed(3)+' 秒';article.append(time);
+    const time=document.createElement('p');time.textContent='实际请求耗时 '+(item.elapsed_seconds??'未知')+' 秒；原片播放位置 '+(item.source_playhead??item.playhead).toFixed(3)+' 秒';article.append(time);
     for(const ref of item.evidence) {
-      const button=document.createElement('button');button.className='secondary';button.textContent='查看证据 '+ref.seconds.toFixed(3)+' 秒';
+      const button=document.createElement('button');button.className='secondary';button.textContent='查看原片证据 '+(ref.source_seconds??ref.seconds).toFixed(3)+' 秒';
       button.onclick=()=>{stopWatch();video.pause();el('mediaSelect').value=ref.media_id;el('mediaSelect').onchange();video.addEventListener('loadedmetadata',()=>{video.currentTime=ref.seconds;},{once:true});};
-      const image=document.createElement('img');image.alt='分析所用证据，原片 '+ref.seconds.toFixed(3)+' 秒';image.src='/api/demo/frame?id='+encodeURIComponent(ref.media_id)+'&seconds='+ref.seconds;
+      const image=document.createElement('img');image.alt='分析所用证据，原片 '+(ref.source_seconds??ref.seconds).toFixed(3)+' 秒';image.src='/api/demo/frame?id='+encodeURIComponent(ref.media_id)+'&seconds='+ref.seconds;
       article.append(button,image);
     }
     el('analysisResults').prepend(article);
@@ -91,7 +91,7 @@
     if(!card) {
       card=document.createElement('article');card.className='measurement-card';
       const heading=document.createElement('h3');heading.textContent='开发板最终转写 · 待本人确认';card.append(heading);
-      const raw=document.createElement('p');raw.textContent='原始口述：'+item.raw_text;card.append(raw);
+      const raw=document.createElement('p');raw.className='raw-transcript';raw.textContent='原始口述：'+item.raw_text;card.append(raw);
       const missing=document.createElement('p');missing.className='missing';card.append(missing);
       for(const [key,label] of [['point','测量位置'],['value','数值'],['unit','单位（V/mV/A/mA/Ω/kΩ）'],['conditions','测量条件']]) {
         const field=document.createElement('label');field.textContent=label;
@@ -108,6 +108,8 @@
       el('measurements').prepend(card);
     }
     card.querySelector('.missing').textContent=item.confirmed?'已确认 · 来源仍为用户口述':item.missing.length?'需要补充：'+item.missing.join('、'):'字段已提取，请核对原片与口述后确认。';
+    card.querySelector('.raw-transcript').textContent='原始口述：'+item.raw_text;
+    if(!item.confirmed)for(const input of card.querySelectorAll('input'))if(!input.value&&document.activeElement!==input)input.value=item[input.dataset.field]??'';
     if(item.confirmed) {
       card.querySelector('h3').textContent='已确认测量 · 可刷新回读';
       for(const input of card.querySelectorAll('input')){input.value=item[input.dataset.field];input.disabled=true;}

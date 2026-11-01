@@ -19,8 +19,10 @@ class Tests(unittest.TestCase):
             self.assertNotIn('user', json.dumps(q))
 
     def test_requires_pushed_checkpoint_and_never_resumes_active_work(self):
-        s={'enabled':True,'checkpoint_pushed':True,'status':'waiting_quota','resume_after':100}
+        s={'enabled':True,'checkpoint_pushed':True,'status':'waiting_quota','resume_after':100,'heartbeat':-300}
         self.assertFalse(ready(s,99)); self.assertTrue(ready(s,101))
+        self.assertFalse(ready(dict(s,heartbeat=100),101))
+        self.assertFalse(ready(dict(s,heartbeat=0),299))
         for status in ['working','resuming','complete','awaiting_checkpoint']:
             self.assertFalse(ready(dict(s,status=status),101))
         self.assertFalse(ready(dict(s,checkpoint_pushed=False),101))

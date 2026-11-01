@@ -404,6 +404,7 @@ def make_server(notes, port, vision=None):
                     meta={key:query.get(key,[''])[0] for key in ('title','author','source_url')}
                     meta['local_use_confirmed']=query.get('local_use_confirmed')==['true']
                     meta['real_footage_confirmed']=query.get('real_footage_confirmed')==['true']
+                    meta['source_offset_seconds']=float(query.get('source_offset_seconds',['0'])[0])
                     return self.reply(200,lab.import_video(self.rfile,int(self.headers.get('Content-Length','0')),meta))
                 except (ValueError,TypeError):
                     return self.reply(400,{'error':'导入失败；请检查来源信息、格式、大小、解码及使用许可。'})
