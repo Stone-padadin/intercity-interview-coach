@@ -1,6 +1,7 @@
 """Synthetic videos/ASR/provider only; these are not real-operation acceptance."""
 import io
 import json
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import tempfile
 import threading
@@ -59,6 +60,19 @@ class Tests(unittest.TestCase):
         self.assertFalse(rows[0]['confirmed']);self.assertIn('七十三点三',rows[0]['raw_text'])
         self.notes.ingest(event(seq=3,text='不要记录电压3V。'))
         self.assertEqual(len(self.lab.list('demo_measurements')),1)
+
+    def test_old_interrupted_draft_does_not_block_fresh_split_speech(self):
+        self.notes.ingest(event(text='记录LED1。'))
+        old=self.lab.list('demo_measurements')[0]
+        old['last_input_at']=(datetime.now(timezone.utc)-timedelta(minutes=2)).isoformat()
+        with self.notes.db() as db:
+            db.execute('UPDATE demo_measurements SET body=? WHERE id=?',(json.dumps(old),old['id']))
+        self.notes.ingest(event(seq=2,text='记录TP2。'))
+        self.notes.ingest(event(seq=3,text='电压0.0733伏，条件视频示值。'))
+        rows=self.lab.list('demo_measurements');self.assertEqual(len(rows),2)
+        fresh=next(r for r in rows if r['point']=='TP2')
+        self.assertEqual(fresh['value'],'0.0733');self.assertEqual(fresh['unit'],'V')
+        self.assertEqual(next(r for r in rows if r['id']==old['id'])['value'],'')
 
     def test_trimmed_media_keeps_original_time_and_local_seek_separate(self):
         self.meta['source_offset_seconds']=150

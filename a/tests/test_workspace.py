@@ -6,6 +6,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from urllib import request, error
 from unittest.mock import Mock, patch
 
@@ -247,6 +248,41 @@ class Tests(unittest.TestCase):
         for path in ['/session.json', '/notes.sqlite3', '/lab_server.py', '/.local/session.json']:
             with self.assertRaises(error.HTTPError) as caught: self.get(path)
             self.assertEqual(caught.exception.code, 404)
+
+    def test_model_wait_does_not_block_fresh_voice_but_pins_experiment(self):
+        started, release = threading.Event(), threading.Event()
+        def waiting_model(*args):
+            started.set()
+            if not release.wait(4):
+                raise RuntimeError('test timed out')
+            return {'id':'synthetic_analysis'}
+        with patch.object(self.server.workspace.lab, 'analyze', side_effect=waiting_model), ThreadPoolExecutor(max_workers=2) as pool:
+            analysis=pool.submit(self.post,'/api/demo/analyze',{'upload_confirmed':True})
+            try:
+                self.assertTrue(started.wait(1))
+                self.assertEqual(self.get('/api/workspace/state')['active_id'],DEFAULT_EXPERIMENT)
+                with self.assertRaises(error.HTTPError) as caught:
+                    self.change('experiments',expected_active_id=DEFAULT_EXPERIMENT,name='blocked',background='')
+                self.assertEqual(caught.exception.code,409)
+                receipt=pool.submit(self.post,'/api/lab/device-events',self.voice()).result(timeout=1)
+                self.assertEqual(receipt['status'],'accepted')
+                self.assertEqual(len(self.current()['measurements']),1)
+            finally:
+                release.set()
+            self.assertEqual(analysis.result(timeout=2)['id'],'synthetic_analysis')
+        self.assertEqual(self.server.workspace.analysis_inflight,0)
+
+    def test_superseded_trials_stay_stored_but_out_of_both_exports(self):
+        item={'id':'a_old','mode':'wiring','answer':'REJECTED_TRIAL','evidence':[],'review_status':'superseded'}
+        with self.server.workspace.notes.db() as db:
+            db.execute('INSERT INTO demo_analyses VALUES(?,?,?)',('a_old',DEFAULT_EXPERIMENT,json.dumps(item)))
+        self.assertEqual(self.current()['analyses'],[])
+        with self.opener.open(self.base+'/api/workspace/export?experiment_id='+DEFAULT_EXPERIMENT) as r:
+            self.assertNotIn(b'REJECTED_TRIAL',r.read())
+        with self.opener.open(self.base+'/api/demo/export') as r:
+            self.assertNotIn(b'REJECTED_TRIAL',r.read())
+        with self.server.workspace.notes.db() as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM demo_analyses').fetchone()[0],1)
 
 
 if __name__ == '__main__':

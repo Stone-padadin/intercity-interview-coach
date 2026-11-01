@@ -76,3 +76,16 @@ python -m unittest -v test_app test_vision test_lab test_continuation
 ## 历史入口
 
 `npm run start:static` 仅用于静态文件回归，不提供统一写记录 API；新页面会如实提示服务未连接。旧面试实现保留在 `legacy/interview/`、`legacy-server.js`，使用 `npm run start:legacy` 单独回归。本次不更新 Pages/CloudBase 公网部署，不把静态站当作本机数据库。
+
+
+## 2026-11-01 当前真机联调
+
+A 首页已增加四功能入口与“AI分析与视频证据”，直接读取同一服务的已保存分析，跳转保留视频、片段时间、模式与风险目标。旧调试结果保留数据库，但从A状态和两页导出排除。模型等待期间不再占住设备事件锁；此时禁止新建/切换实验，避免串实验。
+
+可由统一服务托管已审阅B桥接（默认仍不开串口）：
+```text
+python a/lab_server.py --port 8769 --data-dir <已有C数据目录> --bridge-source <已审阅B桥接路径>/bridge.py --serial-port COM7
+```
+必须先停止旧服务与唯一桥接，再启动；沿用原session.json/notes.sqlite3，不重新创建空数据目录。程序退出会关闭自己启动的桥接；诊断只留本机bridge-runtime.stderr.log，不入Git。板子重启时桥接按保护规则退出，不能静默自动恢复旧实验；先核对硬件状态再明确恢复。页面现能显示桥接退出/过期状态，不把旧record回执当仍然在线。
+
+最新实际状态与12:15彩排方案见 `LIVE_INTEGRATION_20261101.md`。软件检查37项C + 20项A Python + 10项Node，共67项通过；不能把它们等同于完整真人/平台验收。

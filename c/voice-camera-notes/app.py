@@ -201,6 +201,10 @@ class Notes:
             if event['experiment_id'] == self.experiment:
                 self.last_event = now()
                 self.phase = event['phase']
+                if self.phase != 'record':
+                    self.mode_ack = False
+                if event['kind']=='device.status' and data.get('status')=='bound':
+                    self.mode_command = None
             if self.mode_command and event['kind'] == 'device.status' and data.get('command_id') == self.mode_command['command_id'] and data.get('status') == 'mode_set' and event['phase'] == 'record':
                 self.mode_ack = True
             if event['kind'] == 'asr.final':
@@ -269,17 +273,20 @@ class Notes:
         with self.lock:
             if self.mode_ack:
                 return []
-            if self.mode_command is None:
+            if self.mode_command is None or self.mode_command['expires_at_ms'] <= time.time()*1000:
                 self.mode_command = {'schema': 'b.lab.command.v1', 'command_id': 'record_' + uuid.uuid4().hex[:20],
                                      'experiment_id': self.experiment, 'operation': 'mode', 'argument': 'record',
                                      'expires_at_ms': int(time.time()*1000) + 45000}
             return [self.mode_command] if self.mode_command['expires_at_ms'] > time.time()*1000 else []
 
     def status(self):
+        bridge_exit=self.bridge.poll() if self.bridge is not None else None
+        bridge_failed=self.bridge is not None and bridge_exit is not None
         return {'experiment_id': self.experiment, 'camera': self.camera.status(), 'last_device_event': self.last_event,
-                'last_voice_event': self.last_voice, 'device_phase': self.phase, 'record_mode_ack': self.mode_ack,
-                'notice': self.notice,
-                'bridge_running': self.bridge is not None and self.bridge.poll() is None}
+                'last_voice_event': self.last_voice, 'device_phase': self.phase, 'record_mode_ack': self.mode_ack and self.phase=='record' and not bridge_failed,
+                'notice': {'at':now(),'text':'语音桥接已退出，暂不能接收新口述；已保存记录仍保留。'} if bridge_failed else self.notice,
+                'bridge_managed':self.bridge is not None,'bridge_exit_code':bridge_exit,
+                'bridge_running': self.bridge is not None and bridge_exit is None}
 
 def make_server(notes, port, vision=None, lab=None):
     vision = vision or Vision(notes.root / 'vision-config.json')

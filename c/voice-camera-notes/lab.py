@@ -217,7 +217,10 @@ class Lab:
             return
         fields = measurement_fields(raw)
         command=bool(re.match(r'^(?:你好[，,\s]*小灵[，,。\s]*)?(?:请|帮我|请帮我)?[，,\s]*(?:记一下|记录|测量记录)',raw.strip()))
-        pending=[json.loads(r[0]) for r in db.execute('SELECT body FROM demo_measurements WHERE experiment=? AND json_extract(body,\'$.confirmed\')=0 AND json_extract(body,\'$.input_channel\')=\'device_asr_final\' ORDER BY rowid DESC LIMIT 2',(self.notes.experiment,))]
+        pending=[json.loads(r[0]) for r in db.execute('SELECT body FROM demo_measurements WHERE experiment=? AND json_extract(body,\'$.confirmed\')=0 AND json_extract(body,\'$.input_channel\')=\'device_asr_final\' ORDER BY rowid DESC',(self.notes.experiment,))]
+        # An old interrupted draft must not prevent a new conversation's
+        # single fresh draft from receiving its missing fields.
+        pending=[p for p in pending if 0<=(datetime.fromisoformat(event['received_at'])-datetime.fromisoformat(p.get('last_input_at') or p['speech_received_at'])).total_seconds()<=60]
         candidate=pending[0] if len(pending)==1 else None
         if candidate:
             age=(datetime.fromisoformat(event['received_at'])-datetime.fromisoformat(candidate.get('last_input_at') or candidate['speech_received_at'])).total_seconds()

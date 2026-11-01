@@ -5,6 +5,8 @@
   const requestedEvidence = new URLSearchParams(location.search);
   let evidenceOpened = false;
   const measurements = new Map(), analyses = new Set();
+  if(['safety','wiring','history'].includes(requestedEvidence.get('mode')))el('analysisMode').value=requestedEvidence.get('mode');
+  if(['solder_cord','battery_warning'].includes(requestedEvidence.get('risk_focus')))el('riskFocus').value=requestedEvidence.get('risk_focus');
   video.muted = true;
   video.onvolumechange = () => { if (!video.muted) video.muted = true; };
   const status = text => { el('demoProgress').textContent = text; };
