@@ -72,3 +72,7 @@
 在已有工具链的 B checkout 中运行 `powershell -NoProfile -ExecutionPolicy Bypass -File b/tools/configure_product.ps1 -ProductPid 11919`，使用这个新产品自己的 SECRET；该脚本会更新 ignored `.local/product.json`，切换前先备份旧配置。新固件由 `b/lab/build.py --tools-root <已有工具链的B工作区>` 编译，不能把 C/D 的环境绝对路径复制给其他成员。不要上传 SECRET、固件二进制或 NVS 备份。
 
 命令队列已补充回归：过期项、非法项、相同 ID 冲突和超过 16 条的旧命令前缀，不会阻挡后面的有效命令。桥接 26 项测试与产品配置 4 项测试通过；不代表新 Agent 的语义、真实读数或安全提醒已验收。
+
+## 最新补充 · 2026-11-01
+
+PID 11919 已完成两轮原生硬件语音实测，用户听到 LED 排查相关回答，设备有 final ASR 与播放开始。它更新了上文“人工听感待验收”的历史状态，但仅覆盖该口头场景；D 仍需核对平台 Agent ID/版本，A/C 的证据分析与网页数据链仍分别验收。详见 [两轮交付记录](TWO-ROUND-DELIVERY-20261101.md)。
