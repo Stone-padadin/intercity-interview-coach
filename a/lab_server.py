@@ -5,8 +5,10 @@ No serial port, camera or model request starts merely by opening this service.
 import argparse
 import hashlib
 import json
+import os
 import re
 import sqlite3
+import subprocess
 import sys
 import threading
 import uuid
@@ -65,6 +67,7 @@ def markdown_text(value):
 class Workspace:
     def __init__(self, notes, lab):
         self.notes, self.lab = notes, lab
+        self.analysis_inflight = 0
         with notes.db() as db:
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS a_experiments(id TEXT PRIMARY KEY, body TEXT NOT NULL);
@@ -107,7 +110,7 @@ class Workspace:
                 item = json.loads(row[0])
                 item['measurements'] = self.rows(db, 'demo_measurements', item['id'])
                 item['notes'] = self.rows(db, 'notes', item['id'])
-                item['analyses'] = self.rows(db, 'demo_analyses', item['id'])
+                item['analyses'] = [a for a in self.rows(db, 'demo_analyses', item['id']) if a.get('review_status') != 'superseded']
                 experiments.append(item)
             return dict(version=2, active_id=self.notes.experiment, experiments=experiments,
                         status=self.notes.status(), storage='server-sqlite',
@@ -134,6 +137,8 @@ class Workspace:
     def switch(self, target):
         if target == self.notes.experiment:
             return
+        if self.analysis_inflight:
+            raise Conflict('正在分析当前实验，请等待完成后再切换。')
         if self.notes.last_event or (self.notes.bridge and self.notes.bridge.poll() is None):
             raise Conflict('设备已绑定本实验。请停止桥接后重启服务选择实验，避免口述串入其他实验。')
         session = self.notes.root / 'session.json'
@@ -178,6 +183,8 @@ class Workspace:
 
     def _mutate(self, db, action, body):
         if action == 'create':
+            if self.analysis_inflight:
+                raise Conflict('正在分析当前实验，请等待完成后再新建实验。')
             name = text(body.get('name'), '实验名称', 100)
             background = text(body.get('background', ''), '实验背景', 2000, False)
             ident = 'exp_' + uuid.uuid4().hex
@@ -322,6 +329,8 @@ class Workspace:
             lines += ['', '## ' + label, '', esc(experiment['review'].get(key, '')) or '未填写']
         lines += ['', '## AI 分析（待核对）']
         for analysis in analyses:
+            if analysis.get('review_status') == 'superseded':
+                continue
             lines += ['', '### ' + esc(analysis['mode']), esc(analysis['answer']),
                       '证据：' + ', '.join(esc(ref['media_id']) + ' @ 导入片段 ' + str(ref['seconds']) + 's / 来源原片 ' + str(ref.get('source_seconds', ref['seconds'])) + 's' for ref in analysis['evidence'])]
         lines += ['', '未确认草稿不作为正式测量导出。语音、模型和硬件验收状态需另行核实。']
@@ -348,7 +357,7 @@ def create_server(root, port=8765, experiment_id=None):
     base = server.RequestHandlerClass
     assets = {'/': ('index.html', 'text/html'), '/index.html': ('index.html', 'text/html'),
               '/lab.js': ('lab.js', 'text/javascript'), '/lab-store.js': ('lab-store.js', 'text/javascript'),
-              '/lab.css': ('lab.css', 'text/css')}
+              '/lab.css': ('lab.css', 'text/css'), '/favicon.svg': ('favicon.svg', 'image/svg+xml')}
     actions = {'/api/workspace/experiments': 'create', '/api/workspace/select': 'select',
                '/api/workspace/measurements/draft': 'draft', '/api/workspace/measurements/confirm': 'confirm',
                '/api/workspace/measurements/retract': 'retract', '/api/workspace/review': 'review',
@@ -389,6 +398,18 @@ def create_server(root, port=8765, experiment_id=None):
             if capture_confirmation:
                 action = 'confirm'
             if not action:
+                if self.path in ('/api/demo/analyze', '/api/vision/ask'):
+                    if not self.allowed():
+                        return self.reply(403, {'error': '仅允许本机页面访问。'})
+                    # Pin experiment identity without holding the ASR receipt
+                    # lock over a potentially 35-second network request.
+                    with notes.lock:
+                        workspace.analysis_inflight += 1
+                    try:
+                        return super().do_POST()
+                    finally:
+                        with notes.lock:
+                            workspace.analysis_inflight -= 1
                 # Bind C's entire operation to the active experiment until it finishes.
                 with notes.lock:
                     return super().do_POST()
@@ -435,20 +456,33 @@ def main():
     parser.add_argument('--data-dir', type=Path, default=CAPTURE / '.local')
     parser.add_argument('--experiment-id')
     parser.add_argument('--open-browser', action='store_true')
+    parser.add_argument('--bridge-source', type=Path)
+    parser.add_argument('--serial-port', default='COM7')
     args = parser.parse_args()
+    if args.bridge_source and not args.bridge_source.is_file():
+        parser.error('bridge source missing; use the reviewed B bridge.py')
     server = create_server(args.data_dir, args.port, args.experiment_id)
-    print(f'Open http://127.0.0.1:{server.server_port}/ ; experiment_id={server.workspace.notes.experiment}', flush=True)
-    if args.open_browser:
-        # Binding succeeded before the browser opens, so an occupied port never
-        # silently opens an unrelated old service.
-        threading.Timer(.4, lambda: webbrowser.open(f'http://127.0.0.1:{server.server_port}/')).start()
+    notes=server.workspace.notes
     try:
+        if args.bridge_source:
+            with (notes.root/'bridge-runtime.stderr.log').open('ab') as diagnostics:
+                notes.bridge=subprocess.Popen([sys.executable,str(args.bridge_source.resolve()),'--port',args.serial_port,
+                    '--experiment-id',notes.experiment,'--service',f'http://127.0.0.1:{server.server_port}',
+                    '--database',str(notes.root/'bridge.sqlite3')],stdout=subprocess.DEVNULL,stderr=diagnostics,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+        print(f'Open http://127.0.0.1:{server.server_port}/ ; experiment_id={notes.experiment}', flush=True)
+        if args.open_browser:
+            # Binding succeeded before the browser opens.
+            threading.Timer(.4, lambda: webbrowser.open(f'http://127.0.0.1:{server.server_port}/')).start()
         server.serve_forever(poll_interval=.2)
     except KeyboardInterrupt:
         pass
     finally:
         server.workspace.notes.camera.close()
         server.server_close()
+        if notes.bridge and notes.bridge.poll() is None:
+            notes.bridge.terminate()
+            notes.bridge.wait(5)
 
 
 if __name__ == '__main__':

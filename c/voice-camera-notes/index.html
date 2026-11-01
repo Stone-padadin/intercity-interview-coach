@@ -8,6 +8,7 @@
 <div class="actions"><label>已导入素材 <select id="mediaSelect"><option value="">暂无素材</option></select></label><button id="bindVideo" class="secondary">把当前位置关联到下一条口述</button></div>
 <p id="mediaInfo"></p><video id="sourceVideo" controls muted playsinline preload="metadata"></video><p id="boundContext">尚未关联视频位置；导入视频不代表正在录制现场。</p>
 <div class="demo-fields"><label>分析功能<select id="analysisMode"><option value="safety">危险操作提醒</option><option value="wiring">接线指导</option><option value="history">历史证据排错</option></select></label><label>历史起点（原片秒）<input id="historyStart" type="number" min="0" value="0" step="0.1"></label></div>
+<p><label>危险提醒检查目标 <select id="riskFocus"><option value="solder_cord">焊接：线缆与金属热端的位置</option><option value="battery_warning">电池：可见冒烟、喷射、火花或明火</option></select></label></p>
 <label>本次问题<textarea id="demoQuestion" maxlength="1500" placeholder="例如：请检查电源线与烙铁金属段的位置关系。"></textarea></label><label>实验资料（背景，不是本次观察）<textarea id="demoMaterials" maxlength="4000" placeholder="填写本实验已核实的电路资料、元件与测量点；不要填写预设故障答案。"></textarea></label>
 <p><label><input id="demoConsent" type="checkbox">允许将本次选中的视频画面、问题和已确认测量发送给配置的模型服务</label></p><div class="actions"><button id="analyzeVideo">分析播放位置的画面</button><button id="watchSafety" class="secondary">开始顺序风险检查</button><button id="stopSafety" class="secondary" disabled>停止检查</button></div>
 <p id="demoProgress" role="status"></p><p id="riskBanner" role="alert"></p><p class="hint">顺序风险检查会持续产生模型调用，单次开启最多 5 次；模型忙碌时不堆积帧。记录实际响应延迟，不承诺能在事故前制止。遮挡、延迟和未知都不表示现场安全。</p><div id="analysisResults"></div></section>

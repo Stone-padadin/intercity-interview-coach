@@ -90,7 +90,9 @@ function loadDraft(item) {
 function renderStatus() {
   $('storage-status').textContent = '记录保存在这台电脑';
   $('experiment-id').textContent = state.active_id;
-  $('device-status').textContent = state.status.last_device_event
+  const bridgeFailed=state.status.bridge_managed&&!state.status.bridge_running;
+  const stale=state.status.last_device_event && Date.now()-Date.parse(state.status.last_device_event)>90000;
+  $('device-status').textContent = bridgeFailed || stale ? '语音连接已断开 · 记录已保留' : state.status.last_device_event
     ? (state.status.record_mode_ack ? '设备已回执记录模式 · 真人语音待验收' : '收到设备事件 · 等待记录模式回执')
     : '设备语音 · 等待 B 桥接';
   controls();
@@ -160,6 +162,21 @@ function render() {
     if (!item.retracted_at) $('retest-of').append(new Option(`${label} · ${item.point} · ${item.value} ${item.unit}`, item.id));
   });
   if (records.some(item => item.id === previousRetest && !item.retracted_at)) $('retest-of').value = previousRetest;
+  const analyses=(experiment?.analyses || []).filter(item=>item.review_status!=='superseded').slice().reverse();
+  $('empty-analyses').hidden=!!analyses.length;
+  $('analyses').replaceChildren();
+  for(const item of analyses) {
+    const article=element('article',undefined,'record analysis-record');article.dataset.analysisId=item.id;
+    article.append(element('h3',({safety:'危险提醒',wiring:'接线指导',history:'历史排错'}[item.mode]||item.mode)+' · 待核对'));
+    const answer=item.alert ? '可见依据：'+item.alert.evidence+'\n提醒：'+item.alert.message : item.answer;
+    article.append(element('p',answer),element('small','生成时间：'+new Date(item.created_at).toLocaleString('zh-CN',{hour12:false})+' · 请求耗时 '+(item.elapsed_seconds??'未知')+' 秒'));
+    for(const ref of item.evidence || []) {
+      const link=element('a','查看视频证据 · 原片 '+(ref.source_seconds??ref.seconds).toFixed(3)+' 秒');
+      link.href='/capture?'+new URLSearchParams({media_id:ref.media_id,seconds:ref.seconds,mode:item.mode,...(item.risk_focus?{risk_focus:item.risk_focus}:{})});
+      link.target='_blank';link.rel='noopener';article.append(link);
+    }
+    $('analyses').append(article);
+  }
   controls();
 }
 async function refresh(force = false) {

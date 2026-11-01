@@ -7,6 +7,7 @@ const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/lab.css', ['lab.css', 'text/css; charset=utf-8']],
+  ['/favicon.svg', ['favicon.svg', 'image/svg+xml']],
   ['/lab-store.js', ['lab-store.js', 'text/javascript; charset=utf-8']],
   ['/lab.js', ['lab.js', 'text/javascript; charset=utf-8']]
 ]);

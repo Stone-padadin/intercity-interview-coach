@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
+from unittest.mock import Mock
 from urllib import request, error
 from app import Notes, make_server, note_text, now
 
@@ -44,6 +45,27 @@ class Tests(unittest.TestCase):
         for text in ['不要记一下这个','你刚才说记一下了吗','记一下','确认保存','有人说“记一下”','请介绍一下自己']:
             self.assertIsNone(note_text(text), text)
         self.assertEqual(note_text('你好，小灵，请帮我记一下：合成操作'),'合成操作')
+
+    def test_rebind_invalidates_old_record_ack_and_renews_expired_command(self):
+        first=self.notes.commands()[0]
+        ack=event();ack.update(kind='device.status',data={'command_id':first['command_id'],'status':'mode_set'})
+        self.notes.ingest(ack)
+        self.assertTrue(self.notes.status()['record_mode_ack'])
+        bound=event(seq=2);bound.update(kind='device.status',phase='prepare',data={'status':'bound'})
+        self.notes.ingest(bound)
+        self.assertFalse(self.notes.status()['record_mode_ack'])
+        second=self.notes.commands()[0]
+        self.assertNotEqual(first['command_id'],second['command_id'])
+        self.notes.mode_command['expires_at_ms']=0
+        self.assertNotEqual(second['command_id'],self.notes.commands()[0]['command_id'])
+
+    def test_exited_managed_bridge_cannot_keep_record_ready(self):
+        self.notes.mode_ack=True;self.notes.phase='record'
+        self.notes.bridge=Mock();self.notes.bridge.poll.return_value=1
+        status=self.notes.status()
+        self.assertFalse(status['record_mode_ack']);self.assertFalse(status['bridge_running'])
+        self.assertTrue(status['bridge_managed']);self.assertEqual(status['bridge_exit_code'],1)
+        self.assertIsNotNone(status['notice'])
 
     def test_persist_draft_confirm_and_original_provenance(self):
         self.notes.ingest(event())

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="AI 实验台助教原型：确认测量、留下记录、带着证据复测。">
   <title>AI 实验台助教 · 实验记录</title>
-  <link rel="icon" href="data:,">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="lab.css">
   <script src="lab-store.js" defer></script>
   <script src="lab.js" defer></script>
@@ -36,6 +36,7 @@
       </aside>
       <div class="experiment-main">
         <div class="experiment-heading"><div><h2 id="current-name">从一个真实实验开始</h2><p id="current-background">创建实验后，在这里记录测量与复测。</p></div><button id="export" class="button secondary" disabled>导出复盘</button></div>
+        <nav class="assistant-tools panel" aria-label="实验助教功能"><a href="#drafts-title"><strong>语音测量</strong><small>核对草稿，确认保存</small></a><a href="/capture?mode=safety&risk_focus=battery_warning" target="_blank" rel="noopener"><strong>危险提醒</strong><small>实拍画面与可见异常</small></a><a href="/capture?mode=wiring" target="_blank" rel="noopener"><strong>接线指导</strong><small>限定 LED 核对与补证</small></a><a href="/capture?mode=history" target="_blank" rel="noopener"><strong>历史排错</strong><small>回看证据，提出验证</small></a></nav>
         <section class="panel" aria-labelledby="drafts-title"><div class="section-heading"><h2 id="drafts-title">待确认记录</h2><span id="draft-count" class="tag">0 条</span></div><p class="section-note">设备最终转写先进入这里。补齐字段、核对原句后，点击确认才成为正式测量。</p><p id="empty-drafts" class="empty">还没有草稿。可先手动记录；设备接通后，完整测量转写会自动出现。</p><div id="drafts" class="records"></div></section>
         <section class="panel" aria-labelledby="measurement-title">
           <div class="section-heading"><h2 id="measurement-title">记一条测量</h2><span id="input-source" class="tag">手动输入</span></div>
@@ -49,6 +50,7 @@
           <div id="confirmation" class="confirmation" hidden><h3>保存前，再核对一次</h3><p id="draft-summary"></p><div class="actions"><button id="confirm" class="button primary">确认并保存</button><button id="revise" class="button secondary">返回修改</button></div></div>
         </section>
         <section class="panel" aria-labelledby="records-title"><div class="section-heading"><h2 id="records-title">已确认测量</h2><span id="record-count" class="tag">0 条</span></div><p id="empty-records" class="empty">还没有已确认测量。填写后核对，确认保存才会出现在这里。</p><div id="records" class="records"></div></section>
+        <section class="panel" aria-labelledby="analyses-title"><div class="section-heading"><h2 id="analyses-title">AI 分析与视频证据</h2><span class="tag">生成结果 · 待核对</span></div><p class="section-note">与取景分析页使用同一实验、同一份记录；AI 输出不自动成为已确认结论。</p><p id="empty-analyses" class="empty">还没有分析。可从上方功能入口选择视频并明确允许发送画面。</p><div id="analyses" class="records"></div></section>
         <section class="panel" aria-labelledby="review-title"><div class="section-heading"><h2 id="review-title">下一步，验证什么？</h2><span class="tag">人工复盘</span></div><p class="section-note">记录你自己的判断；AI 分析在取景页单独核对，不会自动成为已确认记录。</p><form id="review-form"><fieldset id="review-fields" disabled><label for="issue">观察到的问题</label><textarea id="issue" name="issue" maxlength="2000" rows="2" placeholder="只描述看到或测到的现象"></textarea><label for="hypothesis">候选原因</label><textarea id="hypothesis" name="hypothesis" maxlength="2000" rows="2" placeholder="这是待验证的推断，不是已确定结论"></textarea><label for="next-step">下一项验证</label><textarea id="next-step" name="next_step" maxlength="2000" rows="2" placeholder="下一次测哪里？什么结果能区分这些原因？"></textarea><label for="conclusion">复测后的发现</label><textarea id="conclusion" name="conclusion" maxlength="2000" rows="2" placeholder="引用上面的测量编号，写下变化与仍未知的部分"></textarea><button class="button primary" type="submit">保存复盘</button></fieldset></form></section>
       </div>
     </section>

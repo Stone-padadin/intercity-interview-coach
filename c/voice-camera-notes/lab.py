@@ -217,7 +217,10 @@ class Lab:
             return
         fields = measurement_fields(raw)
         command=bool(re.match(r'^(?:你好[，,\s]*小灵[，,。\s]*)?(?:请|帮我|请帮我)?[，,\s]*(?:记一下|记录|测量记录)',raw.strip()))
-        pending=[json.loads(r[0]) for r in db.execute('SELECT body FROM demo_measurements WHERE experiment=? AND json_extract(body,\'$.confirmed\')=0 AND json_extract(body,\'$.input_channel\')=\'device_asr_final\' ORDER BY rowid DESC LIMIT 2',(self.notes.experiment,))]
+        pending=[json.loads(r[0]) for r in db.execute('SELECT body FROM demo_measurements WHERE experiment=? AND json_extract(body,\'$.confirmed\')=0 AND json_extract(body,\'$.input_channel\')=\'device_asr_final\' ORDER BY rowid DESC',(self.notes.experiment,))]
+        # An old interrupted draft must not prevent a new conversation's
+        # single fresh draft from receiving its missing fields.
+        pending=[p for p in pending if 0<=(datetime.fromisoformat(event['received_at'])-datetime.fromisoformat(p.get('last_input_at') or p['speech_received_at'])).total_seconds()<=60]
         candidate=pending[0] if len(pending)==1 else None
         if candidate:
             age=(datetime.fromisoformat(event['received_at'])-datetime.fromisoformat(candidate.get('last_input_at') or candidate['speech_received_at'])).total_seconds()
@@ -285,6 +288,9 @@ class Lab:
         mode=body.get('mode')
         if mode not in ('safety','wiring','history'):
             raise ValueError('请选择危险提醒、接线指导或历史排错。')
+        risk_focus=body.get('risk_focus','solder_cord')
+        if mode=='safety' and risk_focus not in ('solder_cord','battery_warning'):
+            raise ValueError('请选择已支持的风险检查目标。')
         question=body.get('question','').strip()
         if not question or len(question)>1500:
             raise ValueError('请输入本次问题。')
@@ -314,6 +320,13 @@ class Lab:
                       '操作先后不自动证明因果。不足以定位故障时明确缺证据。下一步只选固定光照/位置/接触后重复测量等一种控制变量验证。'
                       '回答不超过220个汉字。'
         }[mode]
+        if mode=='safety' and risk_focus=='battery_warning':
+            task=('检查电池实验实拍画面中是否可见冒烟、喷射、火花、明火或壳体明显破裂等异常征兆。'
+                  '只根据当前帧，不推断未来是否起火；不能由标题或背景资料认定已经发生异常。'
+                  '电池在夹具中或接着导线本身不证明危险，也不能只凭图像猜温度、电压或内部压力。'
+                  '可见明显异常则risk，当前未见目标征兆则clear，遮挡/画质不足则unknown。'
+                  '输出JSON对象：status为risk/clear/unknown，evidence为可见依据，message为简短停止操作并远离异常电池、通知现场负责人的提醒或状态说明。'
+                  '不得建议徒手移动、触碰或继续给异常电池充放电。仅文字告警，不声称已断电或已阻止事故。')
         materials=body.get('materials','')
         if not isinstance(materials,str) or len(materials)>4000:
             raise ValueError('资料过长。')
@@ -348,6 +361,7 @@ class Lab:
                   model=result['model'],source='ai_generated',confirmed=False,created_at=now(),
                   media_id=asset['id'],playhead=playhead,evidence=evidence,alert=alert,
                   source_playhead=asset.get('source_offset_seconds',0)+playhead,
+                  risk_focus=risk_focus if mode=='safety' else None,
                   elapsed_seconds=result.get('elapsed_seconds'),
                   note='视频素材分析；不等于真实现场风险已被及时制止')
         with self.notes.db() as db:
