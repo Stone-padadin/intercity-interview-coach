@@ -23,6 +23,8 @@ static bool s_has_submit;
 static c_posture_filter_t s_filter;
 static c_posture_calibration_t s_calibration;
 static bool s_calibration_requested;
+static bool s_enabled=true, s_filter_reset;
+static uint32_t s_generation, s_job_generation;
 static c_pose_event_t s_latest;
 static portMUX_TYPE s_result_lock=portMUX_INITIALIZER_UNLOCKED;
 
@@ -32,9 +34,15 @@ static void pose_worker(void *arg)
     for (;;) {
         ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
         portENTER_CRITICAL(&s_result_lock);
+        bool enabled=s_enabled;
+        uint32_t generation=s_job_generation;
         bool calibrate=s_calibration_requested;
+        bool reset=s_filter_reset;
         s_calibration_requested=false;
+        s_filter_reset=false;
         portEXIT_CRITICAL(&s_result_lock);
+        if (!enabled) { xSemaphoreGive(s_free); continue; }
+        if (reset) { c_posture_filter_init(&s_filter); }
         if (calibrate) {
             c_posture_calibration_start(&s_calibration);
             c_posture_filter_init(&s_filter);
@@ -52,6 +60,10 @@ static void pose_worker(void *arg)
             (size_t)s_width*s_height*2,s_width,s_height,&rgb,&width,&height);
 #endif
         if (err==ESP_OK) { err=yolo11_pose_analyze_rgb888(rgb,width,height,"live-camera",&result); }
+        portENTER_CRITICAL(&s_result_lock);
+        bool current=s_enabled && generation==s_generation;
+        portEXIT_CRITICAL(&s_result_lock);
+        if (!current) { xSemaphoreGive(s_free); continue; }
         c_pose_event_t event={
             .frame_id=s_frame_id,.timestamp_ms=s_captured_ms,
             .inference_ms=(uint32_t)((esp_timer_get_time()-started)/1000),
@@ -75,6 +87,9 @@ static void pose_worker(void *arg)
         if (s_calibration_requested) {
             event.valid=false; event.stable_state=C_POSTURE_UNKNOWN;
             event.calibration_state=C_CAL_COLLECTING; event.calibration_samples=0;
+        }
+        if (!s_enabled || generation!=s_generation) {
+            event.valid=false; event.stable_state=C_POSTURE_UNKNOWN;
         }
         s_latest=event;
         portEXIT_CRITICAL(&s_result_lock);
@@ -103,12 +118,26 @@ esp_err_t c_live_pose_request_calibration(void)
 {
     if (!s_worker) { return ESP_ERR_INVALID_STATE; }
     portENTER_CRITICAL(&s_result_lock);
+    if (!s_enabled) { portEXIT_CRITICAL(&s_result_lock); return ESP_ERR_INVALID_STATE; }
     s_calibration_requested=true;
     s_latest.valid=false; s_latest.stable_state=C_POSTURE_UNKNOWN;
     s_latest.calibration_state=C_CAL_COLLECTING; s_latest.calibration_samples=0;
     portEXIT_CRITICAL(&s_result_lock);
     ESP_LOGI(TAG,"CCAL requested: hold neutral for %u valid frames",C_CAL_SAMPLE_COUNT);
     return ESP_OK;
+}
+
+bool c_live_pose_is_ready(void) { return s_worker!=NULL; }
+void c_live_pose_set_enabled(bool enabled)
+{
+    portENTER_CRITICAL(&s_result_lock);
+    if (s_enabled!=enabled) {
+        s_enabled=enabled; s_generation++;
+        s_filter_reset=true;
+        s_latest.valid=false; s_latest.stable_state=C_POSTURE_UNKNOWN;
+        if (!enabled) { s_calibration_requested=false; }
+    }
+    portEXIT_CRITICAL(&s_result_lock);
 }
 
 static void posecal_command(char *out,int length,int argc,char **argv)
@@ -144,7 +173,7 @@ esp_err_t c_live_pose_init(void)
     xSemaphoreGive(s_free);
     if (qm_cli_register_command(&s_posecal_command)!=0) {
         ESP_LOGE(TAG,"posecal CLI registration failed");
-        return ESP_FAIL;
+        /* The worker still serves platform calibration even without local CLI. */
     }
     ESP_LOGI(TAG,"ready: single owned UYVY frame, interval=%u ms, rotate_cw90=%d",
              INFERENCE_INTERVAL_MS,CONFIG_C_POSE_ROTATE_CW90);
@@ -160,6 +189,12 @@ bool c_live_pose_submit(const uint8_t *uyvy,size_t length,uint16_t width,
     uint64_t now=(uint64_t)(esp_timer_get_time()/1000);
     if (s_has_submit && now-s_last_submit_ms<INFERENCE_INTERVAL_MS) { return false; }
     if (xSemaphoreTake(s_free,0)!=pdTRUE) { return false; }
+    portENTER_CRITICAL(&s_result_lock);
+    if (!s_enabled) {
+        portEXIT_CRITICAL(&s_result_lock); xSemaphoreGive(s_free); return false;
+    }
+    s_job_generation=s_generation;
+    portEXIT_CRITICAL(&s_result_lock);
     memcpy(s_raw,uyvy,length);
     s_width=width; s_height=height; s_frame_id=frame_id; s_captured_ms=now;
     s_last_submit_ms=now; s_has_submit=true;
@@ -172,9 +207,10 @@ bool c_live_pose_get_latest(c_pose_event_t *out)
     if (!out) { return false; }
     portENTER_CRITICAL(&s_result_lock);
     *out=s_latest;
+    bool enabled=s_enabled;
     portEXIT_CRITICAL(&s_result_lock);
     uint64_t now=(uint64_t)(esp_timer_get_time()/1000);
-    if (!out->frame_id || now<out->timestamp_ms || now-out->timestamp_ms>C_POSTURE_STALE_MS) {
+    if (!enabled || !out->frame_id || now<out->timestamp_ms || now-out->timestamp_ms>C_POSTURE_STALE_MS) {
         out->valid=false; out->has_person=false; out->stable_state=C_POSTURE_UNKNOWN;
     }
     return out->valid;

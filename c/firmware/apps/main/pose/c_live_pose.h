@@ -25,6 +25,10 @@ typedef struct {
 
 /* Call once during boot BEFORE starting the camera or voice/cloud stack. */
 esp_err_t c_live_pose_init(void);
+bool c_live_pose_is_ready(void);
+/* Disable drops new inference submissions and invalidates in-flight output.
+ * Camera power/stream is separate; this is not a physical privacy shutter. */
+void c_live_pose_set_enabled(bool enabled);
 /* Explicit neutral-reference capture. Re-run after moving the camera; RAM only. */
 esp_err_t c_live_pose_request_calibration(void);
 /* Task context only. Copies into owned memory; busy/rate-limited frames are dropped. */

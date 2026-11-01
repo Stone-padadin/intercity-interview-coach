@@ -8,6 +8,9 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include <string.h>
+#if CONFIG_B_SPI_WORKFLOW_SUPPORT
+#include "b_spi_runtime.h"
+#endif
 #if CONFIG_C_LIVE_POSE_SUPPORT
 #include "b_c_vision.h"
 #endif
@@ -16,7 +19,7 @@
 #endif
 
 #define TAG "b_device"
-typedef enum { B_CMD_STATUS,B_CMD_PHASE,B_CMD_VISUAL,B_CMD_LED_TEST } b_command_t;
+typedef enum { B_CMD_STATUS,B_CMD_PHASE,B_CMD_VISUAL,B_CMD_LED_TEST,B_CMD_SPI } b_command_t;
 typedef struct { b_command_t command; int value; } b_message_t;
 static QueueHandle_t s_commands,s_network;
 static TaskHandle_t s_task;
@@ -33,6 +36,9 @@ int b_device_runtime_phase(b_device_phase_t phase)
     return enqueue(B_CMD_PHASE,(int)phase);
 }
 int b_device_runtime_visual(bool enabled) { return enqueue(B_CMD_VISUAL,enabled); }
+#if CONFIG_B_SPI_WORKFLOW_SUPPORT
+int b_device_runtime_spi(int command) { return enqueue(B_CMD_SPI,command); }
+#endif
 void b_device_runtime_cloud(bool connected)
 {
     if (s_network) { (void)xQueueOverwrite(s_network,&connected); }
@@ -41,6 +47,14 @@ static void cli(char *out,int length,int argc,char **argv)
 {
     (void)out; (void)length;
     int ret=-QM_EINVAL;
+#if CONFIG_B_SPI_WORKFLOW_SUPPORT
+    if (argc==3 && strcmp(argv[1],"spi")==0) {
+        static const char *names[]={"start","calibrate","pause","resume","stop","query"};
+        for (int i=0;i<6;i++) {
+            if (strcmp(argv[2],names[i])==0) { ret=b_device_runtime_spi(i+1); }
+        }
+    }
+#endif
     if (argc==2 && strcmp(argv[1],"status")==0) { ret=enqueue(B_CMD_STATUS,0); }
     if (argc==3 && strcmp(argv[1],"phase")==0) {
         static const char *names[]={"prepare","interview","review","retry"};
@@ -71,6 +85,9 @@ static void worker(void *arg)
 {
     (void)arg;
     b_device_state_t state; b_device_state_init(&state);
+#if CONFIG_B_SPI_WORKFLOW_SUPPORT
+    b_spi_runtime_init();
+#endif
     int old_light=-1;
     uint64_t last_status=0;
 #if CONFIG_B_DEVICE_LED_SUPPORT
@@ -85,10 +102,19 @@ static void worker(void *arg)
             b_device_connection_changed(&state,false);
             b_device_connection_changed(&state,connected);
             xQueueReset(s_commands);
+#if CONFIG_B_SPI_WORKFLOW_SUPPORT
+            b_spi_runtime_connection(connected,now);
+#endif
             QM_LOGI(TAG,"actual cloud connected=%d; confirm project and visual option again",connected);
         }
         b_message_t message;
         while (xQueueReceive(s_commands,&message,0)==pdTRUE) {
+#if CONFIG_B_SPI_WORKFLOW_SUPPORT
+            if (message.command==B_CMD_SPI) {
+                b_spi_runtime_execute(message.value,now);
+                continue;
+            }
+#endif
             if (message.command==B_CMD_PHASE) {
                 bool accepted=b_device_set_phase(&state,(b_device_phase_t)message.value);
                 QM_LOGI(TAG,"phase request=%d accepted=%d actual=%d",message.value,accepted,(int)state.phase);
@@ -109,10 +135,15 @@ static void worker(void *arg)
 #endif
             } else { status(&state,now); }
         }
-#if CONFIG_C_LIVE_POSE_SUPPORT
+#if CONFIG_B_SPI_WORKFLOW_SUPPORT
+        b_spi_runtime_poll(now);
+#elif CONFIG_C_LIVE_POSE_SUPPORT
         (void)b_device_poll_c_vision(&state,now);
 #endif
         int light=(int)b_device_light(&state,now);
+#if CONFIG_B_SPI_WORKFLOW_SUPPORT
+        light=(int)b_spi_runtime_light((b_device_light_t)light);
+#endif
         if (light!=old_light) {
             b_device_rgb_t rgb=b_device_light_rgb((b_device_light_t)light);
             QM_LOGI(TAG,"desired_light=%d rgb=%u,%u,%u",light,rgb.r,rgb.g,rgb.b);

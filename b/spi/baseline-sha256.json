@@ -1,0 +1,6 @@
+{
+  "b/firmware/b_device_runtime.c": "994b56ffce04fdd1a94b7563fba928f878ad04c66126ef678d46386aa13076e1",
+  "b/firmware/b_device_runtime.h": "895cb970ca30d10ebbf7895be441efe3a8cc3b6b7c595ec02a37bc5377e6d91e",
+  "c/firmware/apps/main/pose/c_live_pose.c": "46cc3bcb218a6d9d88dea78179140e0fae074ebd8189b27a67e4b5cf710e0fe5",
+  "c/firmware/apps/main/pose/c_live_pose.h": "9bed4c94398158804dae8314ebc149b4d9f94de9dfd292eaa6bf03a4b588d220"
+}
