@@ -116,6 +116,17 @@ class Tests(unittest.TestCase):
         vision.ask_many.return_value={'answer':'{"status":"risk","evidence":"合成依据","message":"合成提醒"}','model':'synthetic'}
         self.assertEqual(self.lab.analyze(vision,body)['alert']['status'],'risk')
 
+    def test_battery_risk_target_rejects_unknown_target_before_provider(self):
+        asset=self.import_asset();vision=Mock()
+        vision.ask_many.return_value={'answer':'{"status":"unknown","evidence":"合成遮挡","message":"人工核查"}','model':'synthetic'}
+        body={'media_id':asset['id'],'mode':'safety','risk_focus':'battery_warning','playhead':.5,'question':'检查可见异常','upload_confirmed':True}
+        result=self.lab.analyze(vision,body)
+        self.assertEqual(result['alert']['status'],'unknown')
+        self.assertIn('不推断未来',vision.ask_many.call_args.args[1])
+        vision.reset_mock()
+        with self.assertRaises(ValueError):self.lab.analyze(vision,dict(body,risk_focus='invented'))
+        vision.ask_many.assert_not_called()
+
     def test_real_http_upload_range_and_cross_origin_rejection(self):
         server=make_server(self.notes,0);worker=threading.Thread(target=server.serve_forever,daemon=True);worker.start()
         base=f'http://127.0.0.1:{server.server_port}'

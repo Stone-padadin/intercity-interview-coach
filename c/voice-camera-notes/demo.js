@@ -13,9 +13,11 @@
     return result;
   }
   function stopWatch() { watching=false;el('watchSafety').disabled=false;el('stopSafety').disabled=true; }
+  function clearRisk() { el('riskBanner').textContent='';el('riskBanner').className=''; }
+  for(const id of ['analysisMode','riskFocus']) el(id).onchange=()=>{stopWatch();clearRisk();status('检查目标已更改；旧分析保留在下方证据卡片。');};
   el('stopSafety').onclick=stopWatch;
   el('mediaSelect').onchange=()=>{
-    stopWatch(); active=el('mediaSelect').value;video.muted=true;
+    stopWatch();clearRisk();video.pause();status('');active=el('mediaSelect').value;video.muted=true;
     const asset=assets.find(item=>item.id===active);
     if(asset) {
       video.src='/media/'+active+'.mp4';
@@ -46,7 +48,9 @@
     if(analyses.has(item.id))return;analyses.add(item.id);
     const article=document.createElement('article');article.className='analysis-card';
     const title=document.createElement('h3');title.textContent=({safety:'危险提醒',wiring:'接线指导',history:'历史排错'}[item.mode]||item.mode)+' · AI 生成待核对';article.append(title);
-    const body=document.createElement('pre');body.textContent=item.answer;article.append(body);
+    const body=document.createElement('pre');body.textContent=item.alert
+      ? '检查结果：'+({risk:'发现目标风险',clear:'当前帧未见目标风险',unknown:'无法判断'}[item.alert.status]||'无法判断')+'\n可见依据：'+item.alert.evidence+'\n提醒：'+item.alert.message
+      : item.answer;article.append(body);
     const time=document.createElement('p');time.textContent='实际请求耗时 '+(item.elapsed_seconds??'未知')+' 秒；原片播放位置 '+(item.source_playhead??item.playhead).toFixed(3)+' 秒';article.append(time);
     for(const ref of item.evidence) {
       const button=document.createElement('button');button.className='secondary';button.textContent='查看原片证据 '+(ref.source_seconds??ref.seconds).toFixed(3)+' 秒';
@@ -60,19 +64,20 @@
     if(busy)return;
     if(!active||!el('demoConsent').checked){stopWatch();status('先选择视频并明确允许发送画面。');return;}
     busy=true;el('analyzeVideo').disabled=true;
+    for(const id of ['mediaSelect','analysisMode','riskFocus'])el(id).disabled=true;
     const requested=video.currentTime;
     try {
       status('正在分析原片 '+requested.toFixed(3)+' 秒；只使用此前已出现的画面……');
-      const data=await post('/api/demo/analyze',{media_id:active,mode,playhead:requested,start:mode==='history'?Number(el('historyStart').value):requested,question:el('demoQuestion').value,materials:el('demoMaterials').value,upload_confirmed:true});
+      const data=await post('/api/demo/analyze',{media_id:active,mode,risk_focus:el('riskFocus').value,playhead:requested,start:mode==='history'?Number(el('historyStart').value):requested,question:el('demoQuestion').value,materials:el('demoMaterials').value,upload_confirmed:true});
       showAnalysis(data);
       status('分析完成，用时 '+data.elapsed_seconds+' 秒。');
-      if(mode==='safety') {
+      if(mode==='safety'&&data.media_id===active&&data.risk_focus===el('riskFocus').value) {
         const alert=data.alert;el('riskBanner').textContent=alert.message+' '+alert.evidence;
         el('riskBanner').className='risk-'+alert.status;
         if(alert.status!=='clear') {video.pause();stopWatch();}
       }
     }catch(e){stopWatch();status(e.message);}
-    finally{busy=false;el('analyzeVideo').disabled=false;}
+    finally{busy=false;el('analyzeVideo').disabled=false;for(const id of ['mediaSelect','analysisMode','riskFocus'])el(id).disabled=false;}
   }
   el('analyzeVideo').onclick=()=>analyze(el('analysisMode').value);
   el('watchSafety').onclick=async()=>{
