@@ -1,50 +1,78 @@
-# A · 实验记录网页原型
+# A · 统一实验网页与服务
 
-AI 实验台助教当前网页入口。面向电子、自动化与嵌入式学习者，让手动测量先形成可追溯记录，再逐步接入语音、录像和证据分析。
+本任务分支将 PR #11 的 A 网页接入 PR #13 的 C 服务。A 工作区、C 取景/视频页、语音测量、照片和分析证据共用一个实验 ID 与 SQLite 文件。软件联通不代表真人开发板或真实模型案例已验收。
 
-## 运行与检查
+## 启动
 
-Node.js 20 或更新版本；新入口和测试只用 Node.js 标准库，不需要安装依赖。
+Windows 可先双击 `a/01_install.cmd`，完成后双击 `a/02_start.cmd`。后者在绑定端口成功后打开浏览器；保留窗口，关闭服务按 Ctrl+C。
 
-```powershell
-cd a
-npm start
-```
-
-浏览器打开 `http://127.0.0.1:8765/`。需要调整端口时设置 `PORT`。服务默认仅监听本机；不是已发布网站。
+Python 3.11+；手动测量与设备事件接收仅需标准库。从仓库根目录运行：
 
 ```powershell
-npm test
+python a/lab_server.py
 ```
 
-## 当前可用
+或在 `a/` 中执行 `npm start`。打开 <http://127.0.0.1:8765/>。启动默认不打开相机、不读取串口、不输出音频、不调用模型。
 
-- 新建实验、填写电路背景、切换实验。
-- 输入测量点、物理量、有限数值、单位和条件；先核对，再明确确认保存。
-- 同实验复测关联、测量撤销与恢复；保留原记录。
-- 区分观察、候选原因、下一项验证和复测发现的人工复盘。
-- 浏览器本地持久化、刷新回读、按实验隔离；导出 Markdown 复盘。
-- 存储失败明确提示；损坏/未知版本数据停止写入，避免覆盖；另一个标签页修改后要求刷新。
-
-无自动填充示例。记录来源为 `manual`；记录时间是网页确认时间，不冒充仪表或设备采集时间。未确认测量与未保存复盘不导出，离开/切换时提醒。
-
-数据只在当前浏览器的 `intercity.lab-assistant.v1` localStorage 中。旧面试数据使用原有键，不会自动迁移。清除网站数据、换浏览器或换来源地址不能恢复记录；及时导出。Markdown 是复盘文件，当前没有导入恢复能力，也没有跨设备同步。
-
-## 尚未接入
-
-设备最终语音转写、USB 录像回放、十分钟缓存、圈选、真实多模态模型、设备播报与平台上下文均未接入本页。不得把人工填写候选原因称作 AI 诊断。`GET /api/health` 明确返回 `voice/video/ai: false`，不是设备在线探测。
-
-当前运行 `server.js` 仅提供显式列出的静态页面文件，不提供写记录 API。浏览器格式见 [本地数据说明](../docs/interfaces/a-local-records.md)，它不是已批准的 A/B/D 事件协议。
-
-## 历史实现
-
-旧面试前端完整移至 [legacy/interview/](legacy/interview/README.md)，原后端保存在 `legacy-server.js`。如需回归，在安装锁文件依赖后运行：
+相机和视频功能需要安装 C 的依赖，建议独立环境：
 
 ```powershell
-npm ci
-npm run start:legacy
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r c/voice-camera-notes/requirements.txt
+.\.venv\Scripts\python.exe a/lab_server.py
 ```
 
-旧服务单独运行时仍提供原 `/api/resume/parse`、`/api/projects` 和面试页面，不代表新实验服务。不要与新服务占用同一端口。
+首次使用空目录时，当前 ID 是 `exp_a_20261101_01`，不预置测量。页面左侧可查看、复制 ID。后续新实验用 `exp_` 加随机 UUID，旧 ID 保持不变。
 
-既有公网 Pages/CloudBase 是历史部署，本次源码修改不会自动更新这些站点。见 [静态发布边界](PAGES_DEPLOYMENT.md) 和 [历史 CloudBase 部署](CLOUDBASE_DEPLOYMENT.md)。
+默认数据目录 `c/voice-camera-notes/.local/`：
+
+- `session.json`：启动绑定的实验 ID；已有文件时沿用。
+- `notes.sqlite3`：本分支唯一测量/笔记/视频/分析与实验元数据库。
+- `photos/`、`media/`：本机照片与导入视频。
+
+通过 `--port 8771 --data-dir .local/my-lab` 可独立试运行；端口需空闲。重启必须沿用同一数据目录，不要把两个不同目录当作自动同步。
+
+## 使用顺序
+
+1. 打开网页，复制当前实验 ID；可先手动填一条测量。
+2. 点击“核对这条测量”，此时只是服务端草稿；再点“确认并保存”。
+3. 刷新页面或重启服务，检查正式记录回读。
+4. 点“打开取景与视频分析”，在 C 页面核对照片、导入视频及分析证据。两页读取相同记录。
+5. 旧浏览器有 `intercity.lab-assistant.v1` 数据时，可点击“导入浏览器旧记录”。保留原 ID、来源和浏览器数据；冲突拒绝覆盖。localStorage 按来源地址隔离，须从旧网页相同的主机/端口访问才能读取；本版本不提供跨来源自动迁移。
+6. 关联复测、撤销/恢复、保存人工复盘后，导出 Markdown。
+
+## 与 B 联调
+
+使用已审阅的 PR #10 `697de5683ca84d219180ea4af5e241a653e56a67` 桥接，不凭空假设本分支有 `b/lab/bridge.py`。由 B 从自己的工作区启动，替换真实 COM 号与私有数据库路径：
+
+```text
+python <B工作区>/b/lab/bridge.py --port <真实COM号> --experiment-id exp_a_20261101_01 --service http://127.0.0.1:8765 --database <私有目录>/bridge.sqlite3
+```
+
+以网页显示的当前 ID 为准。保持一个串口读取者。先收到匹配的 `record/mode_set` 回执，再让用户真实说一条新的测量。网页保留最终原句，先补字段、核对、确认，再检查刷新回读；重复同事件不重复建记录。原生 Agent 回答不能代替保存回执。
+
+设备事件到达后锁定实验切换。要换实验，先停止桥接、重启 A 服务、在网页选实验，然后用新 ID 重启桥接。不能自动沿用旧设备/平台会话。当前 PID 11920 与已通固件由 B 核实，本任务不刷机、不改设备产品。
+
+## 检查
+
+在 `a/` 运行 `npm test`：A 原有 10 项 Node 检查与新增统一服务检查。也可在仓库根目录仅运行 Python 集成检查：
+
+```powershell
+python -m unittest discover -s a/tests -p 'test_*.py' -v
+```
+
+C 回归在其目录执行（需要 OpenCV）：
+
+```powershell
+python -m unittest -v test_app test_vision test_lab test_continuation
+```
+
+测试用独立临时目录、随机端口及明确合成的数据，不触碰正式数据库、不输出音频、不调用真实计费模型。真人口述与真实实验素材仍需分项验收。
+
+接口、幂等、来源、时间和导入边界见 [统一接口](../docs/interfaces/a-workspace.md)。旧浏览器格式见 [历史本地记录说明](../docs/interfaces/a-local-records.md)。
+
+用户交接包的校验、功能接入与额外修复见 [包接入记录](HANDOFF_PACKAGE.md)，本轮软件与浏览器验证见 [验收记录](../docs/validation-a-integration-20261101.md)。
+
+## 历史入口
+
+`npm run start:static` 仅用于静态文件回归，不提供统一写记录 API；新页面会如实提示服务未连接。旧面试实现保留在 `legacy/interview/`、`legacy-server.js`，使用 `npm run start:legacy` 单独回归。本次不更新 Pages/CloudBase 公网部署，不把静态站当作本机数据库。

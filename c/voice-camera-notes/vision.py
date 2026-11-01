@@ -98,7 +98,7 @@ class Vision:
         cfg = self.config()
         if not isinstance(images,list) or not 1 <= len(images) <= 8 or any(not isinstance(image,bytes) or not image.startswith(b'\xff\xd8\xff') or len(image)>8*1024*1024 for image in images) or sum(map(len,images))>12*1024*1024:
             raise VisionError('需要有效且不超过 8 MB 的 JPEG 照片。', 400)
-        if seconds is not None and (len(seconds)!=len(images) or any(type(s) not in (int,float) or not 0 <= s <= 3600 for s in seconds)):
+        if seconds is not None and (len(seconds)!=len(images) or any(type(s) not in (int,float) or not 0 <= s <= 90000 for s in seconds)):
             raise VisionError('画面时间无效。',400)
         if not self.lock.acquire(blocking=False):
             raise VisionError('上一张图片仍在分析，请稍后再试。', 409)
@@ -110,7 +110,7 @@ class Vision:
                 if seconds is not None:
                     content.append({'type':'text','text':f'以下画面为原片 {seconds[i]:.3f} 秒；仅此帧为证据，不是实时仪器数据。'})
                 content.append({'type':'image_url','image_url':{'url':'data:image/jpeg;base64,'+base64.b64encode(image).decode('ascii')}})
-            body = {'model': cfg['model'], 'stream': False, 'max_tokens': 1200,
+            body = {'model': cfg['model'], 'stream': False, 'max_tokens': 700,
                     'messages': [
                         {'role': 'system', 'content': '你是实验台视觉助教，只返回中文文字。根据本轮图片和问题回答。'
                          '先说明可见证据，再给出结论或下一步建议；看不清时明确说明并指导用户调整取景。'

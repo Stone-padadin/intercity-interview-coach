@@ -42,12 +42,29 @@ UNITS = {'毫伏': ('voltage', 'mV'), '伏特': ('voltage', 'V'), '伏': ('volta
          'kω': ('resistance', 'kΩ'), 'ω': ('resistance', 'Ω')}
 
 
+def spoken_number(value):
+    digits=dict(zip('零〇一二两三四五六七八九',[0,0,1,2,2,3,4,5,6,7,8,9]))
+    negative=value.startswith('负');value=value.lstrip('负')
+    whole,_,fraction=value.partition('点')
+    total=current=0
+    if all(c in digits for c in whole):
+        result=''.join(str(digits[c]) for c in whole)
+    else:
+        for c in whole:
+            if c in digits:current=digits[c]
+            else:total+=(current or 1)*{'十':10,'百':100,'千':1000}[c];current=0
+        result=str(total+current)
+    if fraction:result+='.'+''.join(str(digits[c]) for c in fraction)
+    return ('-' if negative else '')+result
+
+
 def measurement_fields(raw):
     """Deterministic first pass. Missing/ambiguous fields always need a human.
 
     No model may confirm or invent measurements. Keep literal original text.
     """
     text = raw.strip()
+    text=re.sub(r'负?[零〇一二两三四五六七八九十百千]+(?:点[零〇一二两三四五六七八九]+)?(?=\s*(?:毫伏|伏特|伏|毫安|安培|安|千欧|欧姆|欧))',lambda m:spoken_number(m[0]),text)
     point = re.search(r'(?i)(?<![A-Za-z0-9])(TP\s*\d+|VCC|GND|LED\s*\d*)(?![A-Za-z0-9])', text)
     if not point:
         point = re.search(r'(?:测量点|测点|位置)[是为：:\s]*([\w\u4e00-\u9fff]{1,16}?)(?=[，,。\s]|电压|电流|电阻|$)', text)
@@ -59,6 +76,8 @@ def measurement_fields(raw):
         value = values[0].group(1).replace('点', '.')
         quantity, unit = UNITS[values[0].group(2).lower()]
     conditions = next((x for x in ('空载', '带载', '开关闭合', '开关断开', '断电', '通电') if x in text), '')
+    explicit_conditions=re.search(r'(?:测量条件|条件)[是为：:\s]*(.+?)[。]?$',text)
+    if explicit_conditions:conditions=explicit_conditions[1].rstrip('。').strip()
     missing = [label for label, val in [('测量位置', point), ('数值和单位', value), ('测量条件', conditions)] if not val]
     if len(values) > 1:
         missing.append('存在多组读数，请分别记录或人工核对')
@@ -88,7 +107,7 @@ class Lab:
                 f'SELECT body FROM {table} WHERE experiment=? ORDER BY rowid DESC', (self.notes.experiment,))]
 
     def state(self):
-        return {'media': self.list('demo_media'), 'measurements': self.list('demo_measurements'),
+        return {'experiment_id': self.notes.experiment, 'media': self.list('demo_media'), 'measurements': self.list('demo_measurements'),
                 'analyses': self.list('demo_analyses'), 'context': self.context,
                 'voice_acceptance': '真人口述验收尚待执行；页面数据不自动证明实物通过'}
 
@@ -102,6 +121,7 @@ class Lab:
             raise ValueError('请填写标题、作者和 HTTPS 来源链接。')
         if meta.get('local_use_confirmed') is not True or not 0 < size <= 150 * 1024 * 1024:
             raise ValueError('需要确认素材可用于本次展示；视频上限 150 MB。')
+        source_offset=number(meta.get('source_offset_seconds',0),0,86400)
         if not self.import_lock.acquire(blocking=False):
             raise ValueError('已有素材正在导入。')
         ident = 'v_' + uuid.uuid4().hex
@@ -134,6 +154,7 @@ class Lab:
                          kind='imported_video', real_footage_claimed=meta.get('real_footage_confirmed') is True,
                          file=path.name, sha256=digest(path),
                          bytes=size, duration_seconds=duration, fps=fps, width=width, height=height,
+                         source_offset_seconds=source_offset,
                          registered_at=now(), local_use_confirmed=True, capture_time=None,
                          verification='导入可解码；素材内容尚需人工核验')
             with self.notes.db() as db:
@@ -175,6 +196,7 @@ class Lab:
                 raise ValueError('取帧编码失败。')
             image = image.tobytes()
             return image, dict(media_id=ident, seconds=decoded_index/asset['fps'],
+                               source_seconds=asset.get('source_offset_seconds',0)+decoded_index/asset['fps'],
                                frame_index=decoded_index, sha256=hashlib.sha256(image).hexdigest(),
                                source='imported_video', source_url=asset['source_url'])
         finally:
@@ -184,21 +206,45 @@ class Lab:
         asset, _ = self.asset(body.get('media_id'))
         pos = number(body.get('seconds'), 0, asset['duration_seconds'])
         self.context = dict(media_id=asset['id'], seconds=pos, selected_at=now(),
+                            source_seconds=asset.get('source_offset_seconds',0)+pos,
                             source='user_selected_video_position', source_url=asset['source_url'])
         return self.context
 
     def voice(self, event, db):
         """Called inside the Notes receipt transaction, after all provenance checks."""
         raw = event['data']['text']
-        if not re.match(r'^(?:你好[，,\s]*小灵[，,。\s]*)?(?:请|帮我|请帮我)?[，,\s]*(?:记一下|记录|测量记录)', raw.strip()):
+        if re.match(r'^(?:你好[，,\s]*小灵[，,。\s]*)?(?:请[，,\s]*)?(?:不要|别|取消|不记录)',raw.strip()):
             return
         fields = measurement_fields(raw)
-        # Non-measurement notes stay in the existing note path.
+        command=bool(re.match(r'^(?:你好[，,\s]*小灵[，,。\s]*)?(?:请|帮我|请帮我)?[，,\s]*(?:记一下|记录|测量记录)',raw.strip()))
+        pending=[json.loads(r[0]) for r in db.execute('SELECT body FROM demo_measurements WHERE experiment=? AND json_extract(body,\'$.confirmed\')=0 AND json_extract(body,\'$.input_channel\')=\'device_asr_final\' ORDER BY rowid DESC LIMIT 2',(self.notes.experiment,))]
+        candidate=pending[0] if len(pending)==1 else None
+        if candidate:
+            age=(datetime.fromisoformat(event['received_at'])-datetime.fromisoformat(candidate.get('last_input_at') or candidate['speech_received_at'])).total_seconds()
+            if not 0<=age<=60:candidate=None
+        # A short answer to a missing field may complete one unambiguous draft.
+        if candidate and not command:
+            changed=False
+            for key in ('point','quantity','value','unit','conditions'):
+                if not candidate.get(key) and fields.get(key):candidate[key]=fields[key];changed=True
+            if changed:
+                candidate['raw_text']+='\n'+raw
+                candidate.setdefault('speech_events',[candidate['event_id']]).append(event['event_id'])
+                candidate['last_input_at']=event['received_at']
+                candidate['revision']=candidate.get('revision',0)+1
+                candidate['missing']=[label for label,key in [('测量位置','point'),('数值和单位','value'),('测量条件','conditions')] if not candidate.get(key)]
+                db.execute('UPDATE demo_measurements SET body=? WHERE id=?',(json.dumps(candidate,ensure_ascii=False),candidate['id']))
+                return
+        # Record mode itself is explicit. Quantity + value is a measurement draft,
+        # even when native ASR omitted the initial command. Never auto-confirm it.
+        unambiguous=bool(fields['value'] and (fields['point'] or any(x in raw for x in ('电压','电流','电阻'))))
+        if not (command or unambiguous):return
         if not fields['point'] and not fields['value'] and not any(x in raw for x in ('电压','电流','电阻','测量','测点')):
             return
         ident = 'm_' + uuid.uuid4().hex
         item = dict(id=ident, event_id=event['event_id'], raw_text=raw, source='user_reported',
                     input_channel='device_asr_final', created_at=now(), confirmed=False,
+                    speech_events=[event['event_id']], last_input_at=event['received_at'],
                     speech_received_at=event['received_at'], evidence=self.context,
                     **fields)
         db.execute('INSERT INTO demo_measurements VALUES(?,?,?)', (ident, self.notes.experiment, json.dumps(item, ensure_ascii=False)))
@@ -213,7 +259,7 @@ class Lab:
             raise ValueError('请补齐测量位置、单位和条件。')
         try:
             val = Decimal(str(body.get('value')))
-            if not val.is_finite() or abs(val) > Decimal('1e12'):
+            if not val.is_finite() or val.copy_abs() > Decimal('1e12'):
                 raise ValueError('数值无效。')
         except InvalidOperation:
             raise ValueError('数值无效。') from None
@@ -252,22 +298,41 @@ class Lab:
             image,ref=self.frame(asset['id'],pos)
             images.append(image);evidence.append(ref)
         confirmed=[{k:m[k] for k in ('point','quantity','value','unit','conditions','source')}
-                   for m in self.list('demo_measurements') if m['confirmed']]
+                   for m in self.list('demo_measurements') if m['confirmed'] and not m.get('retracted_at')]
         task={
-            'safety':'检查实拍焊接场景中电源线是否与烙铁金属加热段接触。仅凭视觉判断接触关系，不猜温度。'
+            'safety':'检查实拍焊接场景中电源线是否横跨、贴近或接触烙铁金属热端或金属支架，存在滑落碰到高温部件的潜在风险。'
+                     '风险提醒不必等到已经烧损；明确区分画面上的跨越/靠近与无法证明的实际接触或温度。'
+                     '若线缆正常从绝缘手柄尾部引出、没有跨越金属区域，则不要仅因存在烙铁而报警。'
                      '未出现目标风险并不等于现场安全。输出 JSON 对象：status 为 risk/clear/unknown，evidence 为可见依据，'
                      'message 为简短提醒，source_seconds 为所引画面时间。证据不足用 unknown。',
-            'wiring':'依据可见连接与下述实验资料，解释下一步接线及核对方法。不能看见隐藏孔位或电气导通时明确未知。'
-                     '不要宣布接线安全。引用所用画面时间。',
+            'wiring':'本轮使用限定LED指导模板。只输出JSON对象：visible_evidence为不超过60字的可见事实，unknown为不超过60字的未知信息，'
+                     'next_check只选polarity/resistor/closeup之一。不能看见引脚、色环或型号时明确未知。'
+                     '不要生成任何试接电源、调换引脚、表笔接法或仪表按键步骤；程序将按已核实模板给出下一步。',
             'history':'结合当前与先前画面、已确认口述，回答本次异常问题。先列观察及原片时间，再列候选原因和一个优先验证步骤。'
-                      '操作先后不自动证明因果。不足以定位故障时明确缺证据。'
+                      '最多两个候选原因，均明确是推断。较大的电压读数不能证明光照更强，光伏电压不应简单称与光强线性成正比。'
+                      '量程切换不会自行改变实际电压；比较前先统一V和mV，不能编造量程上限或建议未知仪表的按键操作。'
+                      '操作先后不自动证明因果。不足以定位故障时明确缺证据。下一步只选固定光照/位置/接触后重复测量等一种控制变量验证。'
+                      '回答不超过220个汉字。'
         }[mode]
         materials=body.get('materials','')
         if not isinstance(materials,str) or len(materials)>4000:
             raise ValueError('资料过长。')
         prompt=task+'\n用户问题：'+question+'\n实验资料（仅背景，非本次观察）：'+materials+'\n已确认口述：'+json.dumps(confirmed[-10:],ensure_ascii=False)
-        result=vision.ask_many(images,prompt,[ref['seconds'] for ref in evidence])
+        result=vision.ask_many(images,prompt,[ref['source_seconds'] for ref in evidence])
         alert=None
+        if mode=='wiring':
+            checks={
+                'polarity':'先断电，再对照该型号资料核对 LED 阳极和阴极；外观不清则补拍，不靠试接供电确定。',
+                'resistor':'先断电，核对供电电压、LED 额定参数和限流电阻阻值；参数不齐时暂停连接。',
+                'closeup':'请补充 LED 引脚和电阻色环近照，或提供型号资料；当前证据不足以给出具体连接指令。'}
+            try:
+                text=result['answer'].strip()
+                if text.startswith('```'):text=re.sub(r'^```(?:json)?\s*|\s*```$','',text)
+                obj=json.loads(text)
+                if obj.get('next_check') not in checks or not all(isinstance(obj.get(k),str) for k in ('visible_evidence','unknown')):raise ValueError()
+                result['answer']='可见事实：'+obj['visible_evidence']+'\n未知信息：'+obj['unknown']+'\n下一步（已核实LED模板）：'+checks[obj['next_check']]
+            except (ValueError,TypeError,AttributeError):
+                result['answer']='模型未返回可核验的结构化观察。'+checks['closeup']
         if mode=='safety':
             try:
                 text=result['answer'].strip()
@@ -282,6 +347,7 @@ class Lab:
         item=dict(id='a_'+uuid.uuid4().hex,mode=mode,question=question,answer=result['answer'],
                   model=result['model'],source='ai_generated',confirmed=False,created_at=now(),
                   media_id=asset['id'],playhead=playhead,evidence=evidence,alert=alert,
+                  source_playhead=asset.get('source_offset_seconds',0)+playhead,
                   elapsed_seconds=result.get('elapsed_seconds'),
                   note='视频素材分析；不等于真实现场风险已被及时制止')
         with self.notes.db() as db:
@@ -293,9 +359,10 @@ class Lab:
                '外部视频时间为原片位置，不是本机实验发生时间。测量为用户口述，AI 分析未经自动确认。', '', '## 已确认测量']
         for item in self.list('demo_measurements'):
             if item['confirmed']:
-                lines.append(f"- {item['point']}：{item['value']} {item['unit']}；{item['conditions']}；口述事件 {item['event_id']}")
+                mark = '（已撤销，不作为有效测量）' if item.get('retracted_at') else ''
+                lines.append(f"- {mark}{item['point']}：{item['value']} {item['unit']}；{item['conditions']}；来源 {item['source']}；事件 {item['event_id']}")
         lines+=['','## AI 分析（待核对）']
         for item in self.list('demo_analyses'):
             lines+=['',f"### {item['mode']} / {item['created_at']}",item['answer'],
-                    '证据：'+', '.join(f"{r['media_id']} @ {r['seconds']:.3f}s" for r in item['evidence'])]
+                    '证据：'+', '.join(f"{r['media_id']} @ 导入文件 {r['seconds']:.3f}s / 来源原片 {r.get('source_seconds',r['seconds']):.3f}s" for r in item['evidence'])]
         return '\n'.join(lines)
