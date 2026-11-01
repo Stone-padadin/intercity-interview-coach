@@ -84,6 +84,25 @@ class Tests(unittest.TestCase):
         with patch('vision.request.build_opener', return_value=opener):
             with self.assertRaises(VisionError): self.vision.ask(IMAGE, '问题')
 
+    def test_multiple_frames_keep_time_labels_and_request_guard(self):
+        opener=Mock();opener.open.side_effect=lambda *a,**k:self.response()
+        with patch('vision.request.build_opener',return_value=opener):
+            result=self.vision.ask_many([IMAGE,IMAGE],'回溯',[0,2.5])
+        parts=json.loads(opener.open.call_args.args[0].data)['messages'][1]['content']
+        self.assertIn('0.000',parts[1]['text']);self.assertIn('2.500',parts[3]['text'])
+        self.assertEqual(len(result['photo_hashes']),2)
+        cfg=json.loads(self.cfg.read_text());cfg['request_limit']=1;self.cfg.write_text(json.dumps(cfg))
+        with patch('vision.request.build_opener') as transport:
+            with self.assertRaises(VisionError):self.vision.ask(IMAGE,'问题')
+            transport.assert_not_called()
+        self.assertEqual(self.vision.usage()['requests'],1)
+
+    def test_reported_low_quota_stops_before_network(self):
+        cfg=json.loads(self.cfg.read_text());cfg['account_remaining_percent']=10;self.cfg.write_text(json.dumps(cfg))
+        with patch('vision.request.build_opener') as transport:
+            with self.assertRaises(VisionError):self.vision.ask(IMAGE,'问题')
+            transport.assert_not_called()
+
     def test_http_consent_and_note_integrity_before_upload(self):
         notes = Notes(self.root, 'test_exp', Camera())
         notes.ingest(event())

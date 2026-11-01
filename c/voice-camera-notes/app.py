@@ -18,6 +18,7 @@ import time
 from urllib.parse import urlsplit, parse_qs
 import uuid
 from vision import Vision, VisionError
+from lab import Lab
 
 HERE = Path(__file__).resolve().parent
 ID = re.compile(r'[A-Za-z0-9_-]{1,64}\Z')
@@ -171,6 +172,7 @@ class Notes:
         self.mode_command = None
         self.mode_ack = False
         self.notice = None
+        self.voice_handler = None
         with self.db() as db:
             db.executescript('CREATE TABLE IF NOT EXISTS receipts(id TEXT PRIMARY KEY, hash TEXT NOT NULL, outcome TEXT NOT NULL);'
                              'CREATE TABLE IF NOT EXISTS notes(id TEXT PRIMARY KEY, experiment TEXT NOT NULL, body TEXT NOT NULL);')
@@ -232,6 +234,8 @@ class Notes:
                             db.execute('INSERT INTO notes VALUES(?,?,?)', (note['id'], self.experiment, json.dumps(note, ensure_ascii=False)))
                     if outcome in ('rejected_incomplete', 'rejected_stale'):
                         self.notice = {'at': now(), 'text': '这条口述不完整或到达太晚，未拍照。请等设备就绪后重新说一条短记录。'}
+                if self.voice_handler and data['usable_for_confirmation'] and event['phase']=='record' and -1 <= time.time()-stamp(event['received_at']) <= 5:
+                    self.voice_handler(event,db)
             db.execute('INSERT INTO receipts VALUES(?,?,?)', (eid, digest, outcome))
         return {'event_id': eid, 'status': 'accepted', 'outcome': outcome}
 
@@ -279,6 +283,8 @@ class Notes:
 
 def make_server(notes, port, vision=None):
     vision = vision or Vision(notes.root / 'vision-config.json')
+    lab = Lab(notes)
+    notes.voice_handler = lab.voice
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -295,7 +301,7 @@ def make_server(notes, port, vision=None):
             self.send_header('Content-Length', str(len(body)))
             self.send_header('Cache-Control', 'no-store')
             self.send_header('X-Content-Type-Options', 'nosniff')
-            self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; frame-ancestors 'none'")
+            self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; frame-ancestors 'none'")
             self.end_headers()
             self.wfile.write(body)
 
@@ -303,12 +309,52 @@ def make_server(notes, port, vision=None):
             if not self.allowed():
                 return self.reply(403, {'error': '仅允许本机页面访问。'})
             url = urlsplit(self.path)
-            if url.path in ('/', '/app.js', '/style.css'):
-                name = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[url.path]
-                kind = {'/': 'text/html', '/app.js': 'text/javascript', '/style.css': 'text/css'}[url.path]
+            if url.path in ('/', '/app.js', '/demo.js', '/style.css'):
+                name = {'/': 'index.html', '/app.js': 'app.js', '/demo.js': 'demo.js', '/style.css': 'style.css'}[url.path]
+                kind = {'/': 'text/html', '/app.js': 'text/javascript', '/demo.js':'text/javascript', '/style.css': 'text/css'}[url.path]
                 return self.reply(200, (HERE / name).read_bytes(), kind + '; charset=utf-8')
             if url.path == '/api/state':
                 return self.reply(200, {'status': notes.status(), 'notes': notes.list(), 'vision': vision.status()})
+            if url.path == '/api/demo/state':
+                return self.reply(200,lab.state())
+            if url.path == '/api/demo/export':
+                return self.reply(200,lab.export().encode('utf-8'),'text/markdown; charset=utf-8')
+            if url.path == '/api/demo/frame':
+                try:
+                    query=parse_qs(url.query)
+                    image,_=lab.frame(query.get('id',[''])[0],float(query.get('seconds',['0'])[0]))
+                    return self.reply(200,image,'image/jpeg')
+                except (ValueError,TypeError):
+                    return self.reply(400,{'error':'无法取得请求位置的画面。'})
+            media_match=re.fullmatch(r'/media/(v_[a-f0-9]{32})\.mp4',url.path)
+            if media_match:
+                try:
+                    asset,path=lab.asset(media_match[1])
+                    size=asset['bytes']; start=0; end=size-1
+                    interval=self.headers.get('Range')
+                    if interval:
+                        match=re.fullmatch(r'bytes=(\d+)-(\d*)',interval)
+                        if not match:raise ValueError()
+                        start=int(match[1]);end=int(match[2]) if match[2] else end
+                        if not 0<=start<=end<size:raise ValueError()
+                    self.send_response(206 if interval else 200)
+                    self.send_header('Content-Type','video/mp4')
+                    self.send_header('Content-Length',str(end-start+1))
+                    self.send_header('Accept-Ranges','bytes')
+                    self.send_header('Cache-Control','no-store')
+                    self.send_header('X-Content-Type-Options','nosniff')
+                    if interval:self.send_header('Content-Range',f'bytes {start}-{end}/{size}')
+                    self.end_headers()
+                    with path.open('rb') as stream:
+                        stream.seek(start);remaining=end-start+1
+                        while remaining:
+                            chunk=stream.read(min(65536,remaining))
+                            if not chunk:break
+                            self.wfile.write(chunk);remaining-=len(chunk)
+                    return
+                except (ValueError,TypeError):
+                    return self.reply(416,{'error':'素材缺失、变化或请求范围无效。'})
+                except (ConnectionError,OSError):return
             if url.path == '/api/preview':
                 try:
                     return self.reply(200, notes.camera.snapshot()[0], 'image/jpeg')
@@ -350,15 +396,32 @@ def make_server(notes, port, vision=None):
         def do_POST(self):
             if not self.allowed():
                 return self.reply(403, {'error': '仅允许本机页面访问。'})
+            if urlsplit(self.path).path=='/api/demo/media':
+                if self.headers.get('Content-Type','').split(';')[0]!='video/mp4':
+                    return self.reply(415,{'error':'请选择 MP4 视频。'})
+                try:
+                    query=parse_qs(urlsplit(self.path).query)
+                    meta={key:query.get(key,[''])[0] for key in ('title','author','source_url')}
+                    meta['local_use_confirmed']=query.get('local_use_confirmed')==['true']
+                    meta['real_footage_confirmed']=query.get('real_footage_confirmed')==['true']
+                    return self.reply(200,lab.import_video(self.rfile,int(self.headers.get('Content-Length','0')),meta))
+                except (ValueError,TypeError):
+                    return self.reply(400,{'error':'导入失败；请检查来源信息、格式、大小、解码及使用许可。'})
             if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
                 return self.reply(415, {'error': '需要 JSON。'})
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                if not 0 < size <= 16384:
+                if not 0 < size <= 32768:
                     raise ValueError('invalid body length')
                 body = json.loads(self.rfile.read(size))
                 if not isinstance(body, dict):
                     raise ValueError('invalid body')
+                if self.path=='/api/demo/context':
+                    return self.reply(200,lab.set_context(body))
+                if self.path=='/api/demo/measurements/confirm':
+                    return self.reply(200,lab.confirm_measurement(body))
+                if self.path=='/api/demo/analyze':
+                    return self.reply(200,lab.analyze(vision,body))
                 if self.path == '/api/lab/device-events':
                     return self.reply(200, notes.ingest(body))
                 if self.path == '/api/camera/start':

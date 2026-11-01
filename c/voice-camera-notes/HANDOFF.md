@@ -18,7 +18,7 @@
 | 真实模型 | 用户提供百炼普通 API Key；最小文字请求 HTTP 200；qwen3.7-flash 从合成图片正确读出仅在图内出现的随机字符及左右红/蓝色块。真实视觉通道已验证一次，不代表电路或危险识别通过 |
 | 软件测试 | 原有 13 项与视觉适配 5 项共 18 项通过；JavaScript 语法检查通过。模型边界自动测试使用模拟响应 |
 | 开发板 | PID 11920 先前用户确认“你好小灵”唤醒后有完整回答；当前产品、已通固件和 PID 11919 恢复备份保留。本次没有重新验证当前在线/语音状态 |
-| 四功能集成 | 尚未完成：结构化测量接入本页面、实物视频导入/取帧、多帧历史分析、接线流程、危险行为连续识别、四段成片与整体验收 |
+| 四功能集成 | 已新增视频导入/静音播放/取帧、结构化测量确认、多帧分析、风险检查入口与证据导出；29 项合成/软件测试通过。实拍素材、真实模型案例、开发板口述、四段成片与整体验收仍未通过 |
 
 ## 静音、额度与接续约束
 
@@ -67,7 +67,7 @@ git status --short
 git fetch origin
 git worktree add --detach ../lab-demo-review origin/feat/stone-padadin-voice-camera-notes
 cd ../lab-demo-review/c/voice-camera-notes
-python -m unittest -v test_app test_vision
+python -m unittest -v test_app test_vision test_lab test_continuation
 ```
 
 无现有仓库时：
@@ -75,7 +75,7 @@ python -m unittest -v test_app test_vision
 ```powershell
 git clone --branch feat/stone-padadin-voice-camera-notes https://github.com/Stone-padadin/intercity-interview-coach.git lab-demo-review
 cd lab-demo-review/c/voice-camera-notes
-python -m unittest -v test_app test_vision
+python -m unittest -v test_app test_vision test_lab test_continuation
 ```
 
 仅查看静音页面（不打开串口），先确认端口空闲：

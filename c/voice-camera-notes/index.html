@@ -1,7 +1,18 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>小灵 · 实验随手记</title><link rel="stylesheet" href="/style.css"></head>
 <body><main>
-<header><div><span class="eyebrow">小灵实验助教 · 联动试用</span><h1>动手做，开口记。</h1><p>把一句口述和一张现场照片，留在同一条实验记录里。</p></div><span id="connection" class="badge">等待开发板</span></header>
+<header><div><span class="eyebrow">小灵实验助教 · 四功能联调</span><h1>边做实验，边留证据。</h1><p>风险提醒 · 语音测量 · 接线指导 · 历史排错</p></div><span id="connection" class="badge">等待开发板</span></header>
+<nav class="demo-nav"><a href="#videoDemo">实拍视频分析</a><a href="#measurementDemo">语音测量记录</a><a href="#liveDemo">现场取景</a></nav>
+<section id="videoDemo" class="records demo-panel"><h2>实拍视频 · 危险提醒、接线与回溯</h2><p>导入有来源、可用于本次展示的 MP4；视频始终静音。模型按原片时间取证，不使用播放位置之后的画面。没有导入素材时不显示虚构演示。</p>
+<details><summary>导入本机实拍素材</summary><div class="demo-fields"><label>视频文件<input id="mediaFile" type="file" accept="video/mp4,.mp4"></label><label>标题<input id="mediaTitle" maxlength="120"></label><label>作者<input id="mediaAuthor" maxlength="120"></label><label>来源链接<input id="mediaSource" type="url" placeholder="https://…"></label></div><label><input id="mediaPermission" type="checkbox">我已核验这是实拍素材，且可用于本次展示</label><p><button id="importMedia">导入到本机</button></p></details>
+<div class="actions"><label>已导入素材 <select id="mediaSelect"><option value="">暂无素材</option></select></label><button id="bindVideo" class="secondary">把当前位置关联到下一条口述</button></div>
+<p id="mediaInfo"></p><video id="sourceVideo" controls muted playsinline preload="metadata"></video><p id="boundContext">尚未关联视频位置；导入视频不代表正在录制现场。</p>
+<div class="demo-fields"><label>分析功能<select id="analysisMode"><option value="safety">危险操作提醒</option><option value="wiring">接线指导</option><option value="history">历史证据排错</option></select></label><label>历史起点（原片秒）<input id="historyStart" type="number" min="0" value="0" step="0.1"></label></div>
+<label>本次问题<textarea id="demoQuestion" maxlength="1500" placeholder="例如：请检查电源线与烙铁金属段的位置关系。"></textarea></label><label>实验资料（背景，不是本次观察）<textarea id="demoMaterials" maxlength="4000" placeholder="填写本实验已核实的电路资料、元件与测量点；不要填写预设故障答案。"></textarea></label>
+<p><label><input id="demoConsent" type="checkbox">允许将本次选中的视频画面、问题和已确认测量发送给配置的模型服务</label></p><div class="actions"><button id="analyzeVideo">分析播放位置的画面</button><button id="watchSafety" class="secondary">开始顺序风险检查</button><button id="stopSafety" class="secondary" disabled>停止检查</button></div>
+<p id="demoProgress" role="status"></p><p id="riskBanner" role="alert"></p><p class="hint">顺序风险检查会持续产生模型调用，单次开启最多 5 次；模型忙碌时不堆积帧。记录实际响应延迟，不承诺能在事故前制止。遮挡、延迟和未知都不表示现场安全。</p><div id="analysisResults"></div></section>
+<section id="measurementDemo" class="records demo-panel"><h2>开发板语音 · 测量确认</h2><p>白天用“你好小灵”唤醒，再口述“记录，TP1，电压三点二七伏，空载”。先关联视频位置；数值应来自视频里实际可读的仪表，不预填答案。中文数字或不完整读数会要求人工核对。</p><p>只有开发板完整最终转写会生成草稿；缺项先补充，确认后保存。来源是用户口述，不是仪器自动采样。</p><div id="measurements"><p>暂无开发板测量事件；模拟测试不代表真人验收通过。</p></div><p><button id="exportDemo" class="secondary">导出已确认测量与分析证据</button></p></section>
+<section id="liveDemo">
 <section class="capture"><div class="view"><img id="preview" alt="摄像头实时取景"><div id="placeholder">开启摄像头，把电路和仪表完整放进画面</div><span class="live" id="cameraBadge">摄像头未开启</span></div>
 <div class="guide"><span class="step">01 · 确认取景</span><h2>先让画面拍对地方</h2><p>让测量位置、仪表屏幕和操作区域同时入镜。</p><div class="actions"><button id="start">开启摄像头</button><button id="stop" class="secondary">关闭摄像头</button></div>
 <span class="step second">02 · 开口记录</span><blockquote>“你好小灵，记一下，<br>我刚把这根线移到另一排。”</blockquote><p>每条话都以“记一下”开头，并说出具体内容。看到下方记录后，核对照片和文字，再确认保存。</p><p class="hint">截图取自收到完整转写附近的画面，可能晚于你开口的时刻。口述保留为本人报告，不自动当作仪器读数。</p></div></section>
@@ -9,4 +20,4 @@
 <section class="records"><div class="section-head"><div><span class="eyebrow">这轮试用</span><h2>实验记录 <span id="count">0</span></h2></div><p>本页记录保存在这台电脑。<br>以本页“已确认”状态为保存回执。</p></div>
 <div id="message" role="status"></div><div id="empty">还没有记录。相机就绪后，说“你好小灵，记一下，……”开始。</div><div id="notes"></div></section>
 <footer>当前试用：语音照片记录与单次看图问答。只有点击发送才上传照片；模型回答不代表仪器实测或操作已经执行。</footer>
-</main><script src="/app.js"></script></body></html>
+</section></main><script src="/app.js"></script><script src="/demo.js"></script></body></html>
