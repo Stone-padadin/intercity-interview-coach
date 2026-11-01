@@ -281,9 +281,9 @@ class Notes:
                 'notice': self.notice,
                 'bridge_running': self.bridge is not None and self.bridge.poll() is None}
 
-def make_server(notes, port, vision=None):
+def make_server(notes, port, vision=None, lab=None):
     vision = vision or Vision(notes.root / 'vision-config.json')
-    lab = Lab(notes)
+    lab = lab or Lab(notes)
     notes.voice_handler = lab.voice
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):

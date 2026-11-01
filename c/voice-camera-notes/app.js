@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const cards = new Map();
-let polling = false, cameraReady = false, lastNotice = null;
+let polling = false, cameraReady = false, lastNotice = null, currentExperiment = null;
 let visionBusy = false, visionConfigured = false;
 async function askVision(noteId=null) {
   if(visionBusy)return;
@@ -57,11 +57,17 @@ async function poll() {
   try {
     const response=await fetch('/api/state');if(!response.ok)throw new Error();
     const data=await response.json(),s=data.status;
+    if(currentExperiment && currentExperiment!==s.experiment_id) {
+      cards.clear();$('notes').replaceChildren();$('visionAnswer').textContent='';lastNotice=null;
+    }
+    currentExperiment=s.experiment_id;
+    $('connection').title='实验 ID：'+s.experiment_id;
+    if($('workspaceExperiment'))$('workspaceExperiment').textContent=s.experiment_id;
     visionConfigured=Boolean(data.vision?.configured);
     $('visionStatus').textContent=visionConfigured?'模型已配置；实际识图能力仍需验证。':'尚未配置视觉模型；你仍可预览摄像头和保存记录。';
     const fresh=s.last_device_event && Date.now()-Date.parse(s.last_device_event)<45000;
-    const ready=s.bridge_running&&s.record_mode_ack&&fresh;
-    $('connection').textContent=ready?'设备已就绪':s.bridge_running?'等待设备就绪':'语音桥接未运行';$('connection').className='badge'+(ready?' ready':'');
+    const ready=s.record_mode_ack&&fresh;
+    $('connection').textContent=ready?'设备记录模式已回执':fresh||s.bridge_running?'等待设备就绪':'等待语音桥接';$('connection').className='badge'+(ready?' ready':'');
     cameraReady=s.camera.ready;$('cameraBadge').textContent=cameraReady?'相机就绪 · '+s.camera.capture_fps+' 帧/秒':s.camera.running?'相机启动中':'摄像头未开启';
     $('askFrame').disabled=visionBusy||!visionConfigured||!cameraReady;
     if(cameraReady&&!$('preview').getAttribute('src'))$('preview').src='/api/stream?t='+Date.now();

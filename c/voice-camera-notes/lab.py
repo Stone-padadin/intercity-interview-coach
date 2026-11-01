@@ -47,10 +47,13 @@ def spoken_number(value):
     negative=value.startswith('负');value=value.lstrip('负')
     whole,_,fraction=value.partition('点')
     total=current=0
-    for c in whole:
-        if c in digits:current=digits[c]
-        else:total+=(current or 1)*{'十':10,'百':100,'千':1000}[c];current=0
-    result=str(total+current)
+    if all(c in digits for c in whole):
+        result=''.join(str(digits[c]) for c in whole)
+    else:
+        for c in whole:
+            if c in digits:current=digits[c]
+            else:total+=(current or 1)*{'十':10,'百':100,'千':1000}[c];current=0
+        result=str(total+current)
     if fraction:result+='.'+''.join(str(digits[c]) for c in fraction)
     return ('-' if negative else '')+result
 
@@ -104,7 +107,7 @@ class Lab:
                 f'SELECT body FROM {table} WHERE experiment=? ORDER BY rowid DESC', (self.notes.experiment,))]
 
     def state(self):
-        return {'media': self.list('demo_media'), 'measurements': self.list('demo_measurements'),
+        return {'experiment_id': self.notes.experiment, 'media': self.list('demo_media'), 'measurements': self.list('demo_measurements'),
                 'analyses': [a for a in self.list('demo_analyses') if a.get('review_status') != 'superseded'], 'context': self.context,
                 'voice_acceptance': '真人口述验收尚待执行；页面数据不自动证明实物通过'}
 
@@ -210,14 +213,14 @@ class Lab:
     def voice(self, event, db):
         """Called inside the Notes receipt transaction, after all provenance checks."""
         raw = event['data']['text']
-        if re.match(r'^(?:请)?(?:不要|别|取消|不记录)',raw.strip()):
+        if re.match(r'^(?:你好[，,\s]*小灵[，,。\s]*)?(?:请[，,\s]*)?(?:不要|别|取消|不记录)',raw.strip()):
             return
         fields = measurement_fields(raw)
         command=bool(re.match(r'^(?:你好[，,\s]*小灵[，,。\s]*)?(?:请|帮我|请帮我)?[，,\s]*(?:记一下|记录|测量记录)',raw.strip()))
-        pending=[json.loads(r[0]) for r in db.execute('SELECT body FROM demo_measurements WHERE experiment=? AND json_extract(body,\'$.confirmed\')=0 ORDER BY rowid DESC LIMIT 2',(self.notes.experiment,))]
+        pending=[json.loads(r[0]) for r in db.execute('SELECT body FROM demo_measurements WHERE experiment=? AND json_extract(body,\'$.confirmed\')=0 AND json_extract(body,\'$.input_channel\')=\'device_asr_final\' ORDER BY rowid DESC LIMIT 2',(self.notes.experiment,))]
         candidate=pending[0] if len(pending)==1 else None
         if candidate:
-            age=(datetime.fromisoformat(event['received_at'])-datetime.fromisoformat(candidate.get('last_input_at',candidate['speech_received_at']))).total_seconds()
+            age=(datetime.fromisoformat(event['received_at'])-datetime.fromisoformat(candidate.get('last_input_at') or candidate['speech_received_at'])).total_seconds()
             if not 0<=age<=60:candidate=None
         # A short answer to a missing field may complete one unambiguous draft.
         if candidate and not command:
@@ -228,6 +231,7 @@ class Lab:
                 candidate['raw_text']+='\n'+raw
                 candidate.setdefault('speech_events',[candidate['event_id']]).append(event['event_id'])
                 candidate['last_input_at']=event['received_at']
+                candidate['revision']=candidate.get('revision',0)+1
                 candidate['missing']=[label for label,key in [('测量位置','point'),('数值和单位','value'),('测量条件','conditions')] if not candidate.get(key)]
                 db.execute('UPDATE demo_measurements SET body=? WHERE id=?',(json.dumps(candidate,ensure_ascii=False),candidate['id']))
                 return
@@ -255,7 +259,7 @@ class Lab:
             raise ValueError('请补齐测量位置、单位和条件。')
         try:
             val = Decimal(str(body.get('value')))
-            if not val.is_finite() or abs(val) > Decimal('1e12'):
+            if not val.is_finite() or val.copy_abs() > Decimal('1e12'):
                 raise ValueError('数值无效。')
         except InvalidOperation:
             raise ValueError('数值无效。') from None
@@ -294,7 +298,7 @@ class Lab:
             image,ref=self.frame(asset['id'],pos)
             images.append(image);evidence.append(ref)
         confirmed=[{k:m[k] for k in ('point','quantity','value','unit','conditions','source')}
-                   for m in self.list('demo_measurements') if m['confirmed']]
+                   for m in self.list('demo_measurements') if m['confirmed'] and not m.get('retracted_at')]
         task={
             'safety':'检查实拍焊接场景中电源线是否横跨、贴近或接触烙铁金属热端或金属支架，存在滑落碰到高温部件的潜在风险。'
                      '风险提醒不必等到已经烧损；明确区分画面上的跨越/靠近与无法证明的实际接触或温度。'
@@ -355,7 +359,8 @@ class Lab:
                '外部视频时间为原片位置，不是本机实验发生时间。测量为用户口述，AI 分析未经自动确认。', '', '## 已确认测量']
         for item in self.list('demo_measurements'):
             if item['confirmed']:
-                lines.append(f"- {item['point']}：{item['value']} {item['unit']}；{item['conditions']}；口述事件 {item['event_id']}")
+                mark = '（已撤销，不作为有效测量）' if item.get('retracted_at') else ''
+                lines.append(f"- {mark}{item['point']}：{item['value']} {item['unit']}；{item['conditions']}；来源 {item['source']}；事件 {item['event_id']}")
         lines+=['','## AI 分析（待核对）']
         for item in self.list('demo_analyses'):
             if item.get('review_status') == 'superseded':

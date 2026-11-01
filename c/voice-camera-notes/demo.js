@@ -1,7 +1,9 @@
 /* All video playback is muted. No speech synthesis or device-output calls. */
 (() => {
   const el = id => document.getElementById(id), video = el('sourceVideo');
-  let assets = [], active = '', busy = false, watching = false, watchCalls = 0;
+  let assets = [], active = '', busy = false, watching = false, watchCalls = 0, experiment = null;
+  const requestedEvidence = new URLSearchParams(location.search);
+  let evidenceOpened = false;
   const measurements = new Map(), analyses = new Set();
   video.muted = true;
   video.onvolumechange = () => { if (!video.muted) video.muted = true; };
@@ -28,7 +30,7 @@
     if(!file||!el('mediaPermission').checked){status('请选择 MP4 并确认来源与使用方式。');return;}
     const button=el('importMedia');button.disabled=true;
     try {
-      const query=new URLSearchParams({title:el('mediaTitle').value,author:el('mediaAuthor').value,source_url:el('mediaSource').value,local_use_confirmed:'true',real_footage_confirmed:'true'});
+      const query=new URLSearchParams({title:el('mediaTitle').value,author:el('mediaAuthor').value,source_url:el('mediaSource').value,source_offset_seconds:el('mediaOffset').value||'0',local_use_confirmed:'true',real_footage_confirmed:'true'});
       status('正在导入并检查视频解码……');
       const response=await fetch('/api/demo/media?'+query,{method:'POST',headers:{'Content-Type':'video/mp4'},body:file});
       const data=await response.json();if(!response.ok)throw new Error(data.error);
@@ -90,8 +92,8 @@
     let card=measurements.get(item.id);
     if(!card) {
       card=document.createElement('article');card.className='measurement-card';
-      const heading=document.createElement('h3');heading.textContent='开发板最终转写 · 待本人确认';card.append(heading);
-      const raw=document.createElement('p');raw.className='raw-transcript';raw.textContent='原始口述：'+item.raw_text;card.append(raw);
+      const heading=document.createElement('h3');heading.textContent=(item.source==='manual'?'手动草稿':'开发板最终转写')+' · 待本人确认';card.append(heading);
+      const raw=document.createElement('p');raw.className='raw-transcript';raw.textContent=item.raw_text?'原始口述：'+item.raw_text:'来源：A 网页手动输入';card.append(raw);
       const missing=document.createElement('p');missing.className='missing';card.append(missing);
       for(const [key,label] of [['point','测量位置'],['value','数值'],['unit','单位（V/mV/A/mA/Ω/kΩ）'],['conditions','测量条件']]) {
         const field=document.createElement('label');field.textContent=label;
@@ -107,11 +109,11 @@
       if(measurements.size===1)el('measurements').replaceChildren();
       el('measurements').prepend(card);
     }
-    card.querySelector('.missing').textContent=item.confirmed?'已确认 · 来源仍为用户口述':item.missing.length?'需要补充：'+item.missing.join('、'):'字段已提取，请核对原片与口述后确认。';
-    card.querySelector('.raw-transcript').textContent='原始口述：'+item.raw_text;
+    card.querySelector('.missing').textContent=item.retracted_at?'已撤销，不作为有效测量':item.confirmed?'已确认 · '+(item.source==='manual'?'手动输入':'本人报告'):item.missing.length?'需要补充：'+item.missing.join('、'):'字段已提取，请核对原片与口述后确认。';
+    card.querySelector('.raw-transcript').textContent=item.raw_text?'原始口述：'+item.raw_text:'来源：A 网页手动输入';
     if(!item.confirmed)for(const input of card.querySelectorAll('input'))if(!input.value&&document.activeElement!==input)input.value=item[input.dataset.field]??'';
     if(item.confirmed) {
-      card.querySelector('h3').textContent='已确认测量 · 可刷新回读';
+      card.querySelector('h3').textContent=item.retracted_at?'已撤销测量 · 原记录保留':'已确认测量 · 可刷新回读';
       for(const input of card.querySelectorAll('input')){input.value=item[input.dataset.field];input.disabled=true;}
       card.querySelector('button').disabled=true;
     }
@@ -125,11 +127,28 @@
     if(refreshing)return;refreshing=true;
     try {
       const response=await fetch('/api/demo/state');if(!response.ok)throw new Error();const data=await response.json();
+      if(experiment && data.experiment_id!==experiment) {
+        stopWatch();measurements.clear();analyses.clear();assets=[];active='';
+        el('measurements').replaceChildren();el('analysisResults').replaceChildren();
+        video.pause();video.removeAttribute('src');el('mediaInfo').textContent='';
+        el('boundContext').textContent='实验已切换，请重新关联视频位置。';
+      }
+      experiment=data.experiment_id;
       if(JSON.stringify(data.media.map(a=>a.id))!==JSON.stringify(assets.map(a=>a.id))) {
         assets=data.media;el('mediaSelect').replaceChildren(new Option('请选择素材',''),...assets.map(a=>new Option(a.title,a.id)));el('mediaSelect').value=active;
       }
       for(const item of [...data.measurements].reverse())showMeasurement(item);
       for(const item of [...data.analyses].reverse())showAnalysis(item);
+      if(!evidenceOpened && requestedEvidence.has('media_id')) {
+        evidenceOpened=true;
+        const asset=assets.find(item=>item.id===requestedEvidence.get('media_id'));
+        const seconds=Number(requestedEvidence.get('seconds'));
+        if(asset && Number.isFinite(seconds) && seconds>=0 && seconds<=asset.duration_seconds) {
+          el('mediaSelect').value=asset.id;el('mediaSelect').onchange();
+          video.addEventListener('loadedmetadata',()=>{video.pause();video.currentTime=seconds;},{once:true});
+          el('videoDemo').scrollIntoView({block:'start'});
+        }
+      }
     }catch(e){status('演示服务未响应，请检查本机程序。');}finally{refreshing=false;}
   }
   refresh();setInterval(refresh,1500);

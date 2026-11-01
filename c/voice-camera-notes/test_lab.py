@@ -49,6 +49,27 @@ class Tests(unittest.TestCase):
         truncated=event(text='记录 TP1 3V 空载');truncated['data'].update(truncated=True,usable_for_confirmation=False)
         self.notes.ingest(truncated)
         self.assertEqual(self.lab.list('demo_measurements'),[])
+
+    def test_split_natural_measurement_preserves_millivolts_and_provenance(self):
+        self.notes.ingest(event(text='电压七十三点三毫伏，空载。'))
+        self.notes.ingest(event(seq=2,text='测量点是led1。'))
+        rows=self.lab.list('demo_measurements');self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]['value'],'73.3');self.assertEqual(rows[0]['unit'],'mV')
+        self.assertEqual(rows[0]['point'],'LED1');self.assertEqual(len(rows[0]['speech_events']),2)
+        self.assertFalse(rows[0]['confirmed']);self.assertIn('七十三点三',rows[0]['raw_text'])
+        self.notes.ingest(event(seq=3,text='不要记录电压3V。'))
+        self.assertEqual(len(self.lab.list('demo_measurements')),1)
+
+    def test_trimmed_media_keeps_original_time_and_local_seek_separate(self):
+        self.meta['source_offset_seconds']=150
+        asset=self.import_asset();_,ref=self.lab.frame(asset['id'],.5)
+        self.assertAlmostEqual(ref['seconds'],.5);self.assertAlmostEqual(ref['source_seconds'],150.5)
+
+    def test_wiring_uses_only_reviewed_step_template(self):
+        asset=self.import_asset();vision=Mock()
+        vision.ask_many.return_value={'answer':'{"visible_evidence":"可见透明LED","unknown":"极性不清","next_check":"polarity"}','model':'synthetic'}
+        result=self.lab.analyze(vision,{'media_id':asset['id'],'mode':'wiring','playhead':.5,'question':'下一步','upload_confirmed':True})
+        self.assertIn('不靠试接供电确定',result['answer']);self.assertIn('极性不清',result['answer'])
         self.notes.ingest(event(seq=2,text='请介绍一下自己'))
         self.assertEqual(self.lab.list('demo_measurements'),[])
 
