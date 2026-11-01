@@ -27,4 +27,4 @@ for name in ('filter', 'calibration'):
                *map(str, sources), '-lm', '-o', str(exe)]
     subprocess.run(cmd, cwd=out, check=True)
     subprocess.run([str(exe)], cwd=out, check=True)
-print('PASS: 19 Python tests and both C test executables')
+print('PASS: Python discovery and both C test executables (see unittest total above)')

@@ -1,10 +1,12 @@
 {
-  "name": "interview-practice",
+  "name": "ai-lab-assistant",
   "version": "1.0.0",
   "private": true,
-  "description": "Interview practice prototype",
+  "description": "AI lab assistant: confirmed measurements and manual experiment reviews",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js",
+    "start:legacy": "node legacy-server.js"
   },
   "dependencies": {
     "express": "latest",

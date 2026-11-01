@@ -2,4 +2,5 @@
 export PORT=9000
 export UPLOAD_DIR=/tmp/interview-practice/uploads
 export PROJECTS_PATH=/tmp/interview-practice/projects.json
-/var/lang/node20/bin/node server.js
+# Historical interview CloudBase entry. The lab prototype is a separate static app.
+/var/lang/node20/bin/node legacy-server.js

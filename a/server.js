@@ -1,105 +1,38 @@
-const path=require('node:path');
-const fs=require('node:fs');
-const crypto=require('node:crypto');
-const express=require('express');
-const multer=require('multer');
-const mammoth=require('mammoth');
-const {PDFParse}=require('pdf-parse');
-
-const app=express();
-const port=Number(process.env.PORT||8765);
-const uploadDir=process.env.UPLOAD_DIR||path.join(__dirname,'uploads');
-fs.mkdirSync(uploadDir,{recursive:true});
-const projectsPath=process.env.PROJECTS_PATH||path.join(__dirname,'interview-practice.json');
-function readProjects(){
-  try{return JSON.parse(fs.readFileSync(projectsPath,'utf8'));}
-  catch(error){return [];}
-}
-function writeProjects(projects){
-  fs.writeFileSync(projectsPath,JSON.stringify(projects,null,2));
-}
-const upload=multer({dest:uploadDir,limits:{fileSize:10*1024*1024},fileFilter:(req,file,done)=>{
-  const ext=path.extname(file.originalname).toLowerCase();
-  const allowed=['.pdf','.doc','.docx'];
-  if(!allowed.includes(ext))return done(new Error('INVALID_FILE_TYPE'));
-  done(null,true);
-}});
-
-app.use((req,res,next)=>{
-  res.setHeader('Access-Control-Allow-Origin','*');
-  res.setHeader('Access-Control-Allow-Headers','Content-Type');
-  res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');
-  if(req.method==='OPTIONS')return res.sendStatus(204);
-  next();
-});
-
-function detectCandidateName(text){
-  const lines=text.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).slice(0,12);
-  const ignored=/简历|个人信息|教育经历|求职意向|求职方向|工作经历|项目经历|技能|电话|手机|邮箱|电子信息|工程师|应聘|resume/i;
-  return lines.find(line=>/^[\u4e00-\u9fff]{2,4}$/.test(line)&&!ignored.test(line))||'';
-}
-
-app.use(express.json());
-app.use(express.static(__dirname));
-
-app.get('/api/health',(req,res)=>res.json({ok:true,service:'resume-parser'}));
-
-app.post('/api/projects',(req,res)=>{
-  const input=req.body||{};
-  if(!String(input.project_name||'').trim())return res.status(400).json({error:'项目名称不能为空'});
-  const now=new Date().toISOString();
-  const project={
-    session_id:String(input.session_id||crypto.randomUUID()),
-    candidate_name:String(input.candidate_name||''),resume_file:String(input.resume_file||''),
-    professional:String(input.professional||''),target:String(input.target||''),skills:String(input.skills||''),
-    project_name:String(input.project_name).trim(),contribution:String(input.contribution||''),
-    technical_plan:String(input.technical_plan||''),debugging:String(input.debugging||''),result:String(input.result||''),
-    created_at:now,updated_at:now
-  };
-  const projects=readProjects();
-  const saved={id:projects.length?Math.max(...projects.map(item=>Number(item.id)||0))+1:1,...project};
-  projects.push(saved);
-  writeProjects(projects);
-  res.status(201).json(saved);
-});
-
-app.get('/api/projects/:sessionId',(req,res)=>{
-  const project=readProjects().filter(item=>item.session_id===req.params.sessionId).sort((a,b)=>b.id-a.id)[0];
-  if(!project)return res.status(404).json({error:'未找到项目记录'});
-  res.json(project);
-});
-
-app.post('/api/resume/parse',upload.single('resume'),async(req,res)=>{
-  if(!req.file)return res.status(400).json({error:'请上传 PDF、DOC 或 DOCX 文件'});
-  try{
-    const ext=path.extname(req.file.originalname).toLowerCase();
-    let text='';
-    if(ext==='.pdf'){
-      const parser=new PDFParse({data:fs.readFileSync(req.file.path)});
-      const parsed=await parser.getText();
-      text=parsed.text;
-      await parser.destroy();
-    }else if(ext==='.docx'){
-      const parsed=await mammoth.extractRawText({path:req.file.path});
-      text=parsed.value;
-    }else{
-      return res.status(415).json({error:'暂不支持旧版 DOC，请另存为 DOCX 或 PDF'});
+'use strict';
+// Static prototype only. Records remain in the browser, not on this server.
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+const files = new Map([
+  ['/', ['index.html', 'text/html; charset=utf-8']],
+  ['/index.html', ['index.html', 'text/html; charset=utf-8']],
+  ['/lab.css', ['lab.css', 'text/css; charset=utf-8']],
+  ['/lab-store.js', ['lab-store.js', 'text/javascript; charset=utf-8']],
+  ['/lab.js', ['lab.js', 'text/javascript; charset=utf-8']]
+]);
+function createServer() {
+  return http.createServer((req, res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (!['GET', 'HEAD'].includes(req.method)) {
+      res.writeHead(405, { Allow: 'GET, HEAD' }); return res.end();
     }
-    const normalized=text.replace(/\r\n/g,'\n').replace(/[ \t]+\n/g,'\n').trim();
-    if(!normalized)return res.status(422).json({error:'没有提取到文字，请上传可复制文字的 PDF 或 DOCX 简历'});
-    res.json({fileName:req.file.originalname,text:normalized,size:req.file.size,characters:normalized.length,candidateName:detectCandidateName(normalized)});
-  }catch(error){
-    res.status(422).json({error:'简历解析失败，请检查文件内容后重试'});
-  }finally{
-    fs.rm(req.file.path,{force:true},()=>{});
-  }
-});
-
-app.use((error,req,res,next)=>{
-  if(error?.code==='LIMIT_FILE_SIZE')return res.status(413).json({error:'文件不能超过 10 MB'});
-  if(error?.message==='INVALID_FILE_TYPE')return res.status(415).json({error:'请上传 PDF、DOC 或 DOCX 文件'});
-  if(error) return res.status(500).json({error:'上传服务暂时不可用，请稍后重试'});
-  next();
-});
-
-app.listen(port,'0.0.0.0',()=>console.log(`Interview practice server listening on ${port}`));
+    const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
+    if (pathname === '/api/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(req.method === 'HEAD' ? undefined : JSON.stringify({ ok: true, service: 'lab-assistant-prototype', storage: 'browser-local', voice: false, video: false, ai: false }));
+    }
+    const file = files.get(pathname);
+    if (!file) { res.writeHead(404); return res.end('Not found'); }
+    fs.readFile(path.join(__dirname, file[0]), (error, data) => {
+      if (error) { res.writeHead(500); return res.end('Unable to read page'); }
+      res.writeHead(200, { 'Content-Type': file[1], 'Cache-Control': 'no-cache' });
+      res.end(req.method === 'HEAD' ? undefined : data);
+    });
+  });
+}
+if (require.main === module) {
+  const port = Number(process.env.PORT || 8765);
+  const host = process.env.HOST || '127.0.0.1';
+  createServer().listen(port, host, () => console.log(`AI lab assistant prototype: http://${host}:${port}`));
+}
+module.exports = { createServer };

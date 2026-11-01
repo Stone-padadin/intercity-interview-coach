@@ -25,3 +25,8 @@ backups/
 *.o
 .vscode/
 .idea/
+
+# Local browser verification artifacts
+output/playwright/
+.playwright-cli/
+.playwright/
