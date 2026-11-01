@@ -1,15 +1,12 @@
 --- a/qumios-dev/platform/mcu/esp32s3/qm_audio/qm_audio_device_vb701n.c
 +++ b/qumios-dev/platform/mcu/esp32s3/qm_audio/qm_audio_device_vb701n.c
-@@ -89,6 +89,7 @@
- static volatile uint8_t g_abort_read;
+@@ -90,4 +90,5 @@
  static volatile uint8_t g_abort_write;
  static uint8_t g_play;
 +static uint8_t g_first_playback_packet;
  static uint8_t g_cap;
  static uint8_t g_mute;
- static uint8_t g_mic_logged;
-@@ -682,6 +683,9 @@
-     g_abort_write = 0;
+@@ -683,4 +684,7 @@
      g_last_send_ms = 0;
      g_play = 1;
 +    g_first_playback_packet = 1;
@@ -17,9 +14,7 @@
 +            (unsigned)g_volume, (unsigned)g_mute, flow_is_busy());
      send_pcm_lead_silence();
      return QM_EOK;
- }
-@@ -711,7 +715,25 @@
-         if (pcm_len <= 0) {
+@@ -712,5 +716,23 @@
              return pcm_len < 0 ? pcm_len : -QM_ERROR;
          }
 -        return pace_send(pcm, (uint32_t)pcm_len, timeout_ms);
@@ -44,4 +39,3 @@
 +        return result;
      }
  }
- 
