@@ -10,4 +10,8 @@ void b_device_runtime_cloud(bool connected);
 /* Local product entry points. No network API or platform property is implied. */
 int b_device_runtime_phase(b_device_phase_t phase);
 int b_device_runtime_visual(bool enabled);
+#if CONFIG_B_SPI_WORKFLOW_SUPPORT
+/* Platform/CLI commands hand off to the same owner task as visual output. */
+int b_device_runtime_spi(int command);
+#endif
 #endif
