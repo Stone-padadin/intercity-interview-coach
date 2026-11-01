@@ -178,8 +178,18 @@ static int hex_value(char c) {
     if (c>='a'&&c<='f') return c-'a'+10;
     return -1;
 }
+/* Optional reviewed SDK extension; older SDKs report unavailable. */
+extern int agent_app_request_wakeup(void) __attribute__((weak));
 static void cli(char *out,int len,int argc,char **argv) {
     (void)out;(void)len;
+    if (argc==3 && !strcmp(argv[1],"voice-start") && identifier(argv[2],32)) {
+        context_t ctx=context();
+        if (!ctx.experiment[0] || ctx.mode!=1 || s_busy) {
+            status("device.status",argv[2],"voice_start_rejected");return;
+        }
+        int ret=agent_app_request_wakeup ? agent_app_request_wakeup() : -QM_ENOSYS;
+        status("device.status",argv[2],ret==QM_EOK?"voice_start_requested":"voice_start_unavailable");return;
+    }
     if (argc==2 && !strcmp(argv[1],"status")) { status("device.status",NULL,"ready"); return; }
     if (argc==3 && !strcmp(argv[1],"sync") && identifier(argv[2],32)) {
         context_t ctx=context(); cJSON *d=cJSON_CreateObject();cJSON_AddStringToObject(d,"nonce",argv[2]);
