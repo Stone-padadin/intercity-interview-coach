@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Embedded Lab Visual Risk Event",
+  "type": "object",
+  "required": [
+    "event_id",
+    "experiment_id",
+    "time_range_ms",
+    "category",
+    "risk_level",
+    "confidence",
+    "observations",
+    "recommended_action",
+    "requires_user_confirmation"
+  ],
+  "properties": {
+    "event_id": { "type": "string", "minLength": 1 },
+    "experiment_id": { "type": "string", "minLength": 1 },
+    "time_range_ms": {
+      "type": "array",
+      "prefixItems": [
+        { "type": "integer", "minimum": 0 },
+        { "type": "integer", "minimum": 0 }
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "category": {
+      "enum": [
+        "V01_LIVE_REWIRING",
+        "V02_SHORT_CIRCUIT_RISK",
+        "V03_METER_MISUSE",
+        "V04_SOLDERING_HEAT_RISK",
+        "V05_BATTERY_DAMAGE",
+        "V06_SMOKE_SPARK_FIRE",
+        "V07_MECHANICAL_INTRUSION",
+        "V08_PPE_ENVIRONMENT",
+        "V09_MAINS_HIGH_VOLTAGE",
+        "V10_UNATTENDED_OPERATION",
+        "UNKNOWN"
+      ]
+    },
+    "risk_level": { "enum": ["L0", "L1", "L2", "L3"] },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "observations": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "missing_evidence": { "type": "array", "items": { "type": "string" } },
+    "recommended_action": { "type": "string", "minLength": 1 },
+    "requires_user_confirmation": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}
